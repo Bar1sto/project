@@ -1,6 +1,7 @@
 from django.db import models
 from django.urls import reverse
 from django.utils.text import slugify
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class ProductGroup(models.Model):
@@ -8,13 +9,6 @@ class ProductGroup(models.Model):
         max_length=255,
         verbose_name='Название группы товаров',
         unique=True
-    )
-    
-    slug = models.SlugField(
-        'URL-идентификатор',
-        max_length=255,
-        unique=True,
-        blank=True
     )
     
     def __str__(self):
@@ -32,13 +26,6 @@ class Brand(models.Model):
         unique=True,
     )
     
-    slug = models.SlugField(
-        'URL-идентификатор',
-        max_length=255,
-        unique=True,
-        blank=True
-    )
-    
     def __str__(self):
         return self.name
     
@@ -47,7 +34,7 @@ class Brand(models.Model):
         verbose_name_plural = 'Бренды'
         ordering = ['name']
 
-class Category(models.Models):
+class Category(models.Model):
     name = models.CharField(
         max_length=255,
         verbose_name='Название категории'
@@ -80,7 +67,8 @@ class Category(models.Models):
 class Product(models.Model):
     name = models.CharField(
         max_length=255,
-        verbose_name='Название товара'
+        verbose_name='Название товара',
+        db_index=True,
     )
     description = models.TextField(
         verbose_name='Описание товара',
@@ -89,21 +77,25 @@ class Product(models.Model):
     category = models.ForeignKey(
         Category,
         on_delete=models.PROTECT,
-        verbose_name='Категория'
+        verbose_name='Категория',
+        related_name='products',
     )
     brand = models.ForeignKey(
         Brand,
         on_delete=models.PROTECT,
-        verbose_name='Бренд'
+        verbose_name='Бренд',
+        related_name='products',
     )
     group = models.ForeignKey(
         ProductGroup,
         on_delete=models.PROTECT,
-        verbose_name='Группа товаров'
+        verbose_name='Группа товаров',
+        related_name='products',
     )
     is_active = models.BooleanField(
         verbose_name='Активен',
-        default=True
+        default=True,
+        db_index=True,
     )
     is_order = models.BooleanField(
         verbose_name='Под заказ',
@@ -122,16 +114,29 @@ class Product(models.Model):
     )
     sale = models.PositiveIntegerField(
         verbose_name='Скидка (%)',
-        default=0
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
     )
     
     def __str__(self):
         return f"{self.brand} {self.name}"
     
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+        
+    def get_absolute_url(self):
+        return reverse('product_detail', kwargs={'slug': self.slug})
+    
     class Meta:
         verbose_name = 'Товар'
         verbose_name_plural = 'Товары'
-        ordering = ['-id']
+        ordering = ['-name']
+        indexes = [
+            models.Index(fields=['name', 'brand']),
+        ]
+        
     
 class ProductAttribute(models.Model):
     name = models.CharField(
@@ -143,12 +148,6 @@ class ProductAttribute(models.Model):
         ProductGroup,
         on_delete=models.CASCADE,
         verbose_name='Группа товаров'
-    )
-    slug = models.SlugField(
-        'URL-идентификатор',
-        max_length=255,
-        unique=True,
-        blank=True
     )
     
     def __str__(self):
@@ -173,12 +172,6 @@ class ProductAttributeValue(models.Model):
     value = models.CharField(
         max_length=255,
         verbose_name='Значение'
-    )
-    slug = models.SlugField(
-        'URL-идентификатор',
-        max_length=255,
-        unique=True,
-        blank=True
     )
     
     def __str__(self):
@@ -209,12 +202,6 @@ class ProductVariant(models.Model):
         max_digits=10,
         decimal_places=2,
         verbose_name='Цена'
-    )
-    slug = models.SlugField(
-        'URL-идентификатор',
-        max_length=255,
-        unique=True,
-        blank=True
     )
     
     def __str__(self):
