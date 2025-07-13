@@ -4,7 +4,6 @@ from django.utils.text import slugify
 from django.utils import timezone
 from django.core.validators import RegexValidator, validate_email
 
-from orders.models import Order
 from decimal import Decimal
 
         
@@ -86,15 +85,23 @@ class Bonus(models.Model):
         auto_now_add=True,
         verbose_name='Дата начисления'
     )
+        
+    def default_expires_at():
+        return timezone.now() + timezone.timedelta(days=365)
+    
     expires_at = models.DateTimeField(
         verbose_name='Дата сгорания',
-        default=lambda: timezone.now() + timezone.timedelta(days=365)
+        default=default_expires_at,
     )
     order= models.ForeignKey(
-        Order,
+        'orders.Order',
         on_delete=models.CASCADE,
         related_name='bonuses',
         verbose_name='Заказ',
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='Активен'
     )
     
     def __str__(self):

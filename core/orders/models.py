@@ -1,12 +1,11 @@
 from django.db import models
 from django.utils.text import slugify
 from django.urls import reverse
-from customers.models import Client
 from products.models import Product, ProductVariant
 
 class Cart(models.Model):
     client = models.ForeignKey(
-        Client,
+        'customers.Client',
         on_delete=models.CASCADE
     )
     create_at = models.DateField(
@@ -45,7 +44,7 @@ class Order(models.Model):
         on_delete=models.CASCADE,
     )
     client = models.ForeignKey(
-        Client,
+        'customers.Client',
         on_delete=models.CASCADE,
     )
     order_total = models.DecimalField(
@@ -63,7 +62,6 @@ class Order(models.Model):
         ('not_completed', 'Невыполнен'),
     ]
     status = models.CharField(
-        max_length=20,
         choices=CHOICES_STATUS,
         default='not_completed',
         verbose_name='Статус заказа',
@@ -94,7 +92,6 @@ class OrderItem(models.Model):
         on_delete=models.CASCADE,
     )
     item_quantity = models.PositiveIntegerField(
-        max_length=1,
         default=1,
         verbose_name='Количество товара в заказе',
     )
@@ -121,7 +118,6 @@ class CartItem(models.Model):
         on_delete=models.CASCADE,
     )
     quantity = models.PositiveIntegerField(
-        max_length=1,
         default=1,
         verbose_name='Количество товаров в корзине',
     )
