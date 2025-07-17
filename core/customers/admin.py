@@ -10,6 +10,7 @@ from .models import (
 
 
 class OrderInline(admin.StackedInline):
+    '''Объект заказов у клиента'''
     model = Order
     extra = 0
     readonly_fields = ('order_total', 'create_at', 'status')
@@ -20,9 +21,32 @@ class OrderInline(admin.StackedInline):
     def get_fields(self, request, obj=None):
         return ('id', 'order_total', 'status')
 
-
+class PromocodeClientInline(admin.StackedInline):
+    model = PromocodeClient
+    extra = 0
+    readonly_fields = ('promocode',)
+    can_delete = False
+    show_change_link = True
+    
+    def get_fields(self, request, obj = None) :
+        return ('promocode',)
+    
+    
+class BonusInline(admin.StackedInline):
+    '''Объект бонусов у клиента'''
+    model = Bonus
+    extra = 0
+    readonly_fields = ('amount', 'created_at', 'expires_at')
+    can_delete = False
+    list_filter = ('is_active',)
+    show_change_link = True
+    
+    def get_fields(self, request, obj = None):
+        return ('id', 'amount')
+    
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
+    '''Класс клиенты'''
     list_display = (
         'name',
         'surname',
@@ -63,17 +87,44 @@ class ClientAdmin(admin.ModelAdmin):
         'email',
     ]
     
-    inlines = [OrderInline]
+    inlines = [
+        BonusInline,
+        PromocodeClientInline,
+        OrderInline
+        ]
     
 
 @admin.register(Bonus)
 class BonusAdmin(admin.ModelAdmin):
-    pass
-
+    list_display = (
+        'client',
+        'amount',
+        'created_at',
+        'expires_at',
+        'order',
+        'is_active',
+        
+    )
+    
+    list_filter = [
+        'is_active',
+    ]
+    
 
 @admin.register(Promocode)
 class PromocodeAdmin(admin.ModelAdmin):
-    pass
+    '''Класс промокод'''
+    list_display = (
+        'name',
+        'last_day',
+        'is_active',
+        'is_personal',
+    )
+    
+    list_filter = [
+        'is_active',
+        'is_personal'
+        ]
 
 
 @admin.register(PromocodeClient)

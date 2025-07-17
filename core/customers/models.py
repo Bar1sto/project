@@ -137,12 +137,10 @@ class Promocode(models.Model):
         verbose_name='Последняя дата активности')
     is_active = models.BooleanField(
         default=False,
-        unique=True,
         verbose_name='Статус промокоода',
     )
     is_personal = models.BooleanField(
         default=False,
-        unique=True,
         verbose_name='Персональный промокод'
     )
     
