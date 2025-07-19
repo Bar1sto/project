@@ -125,13 +125,22 @@ class PromocodeAdmin(admin.ModelAdmin):
         'is_active',
         'is_personal'
         ]
+    
+    
 
 
 @admin.register(PromocodeClient)
 class PromocodeClientAdmin(admin.ModelAdmin):
-    pass
+    list_display = (
+        'client',
+        'promocode'
+    )
 
 
 @admin.register(PromocodeUsage)
 class PromocodeUsage(admin.ModelAdmin):
-    pass
+    list_display = (
+        'client',
+        'promocode',
+        'used_at',
+    )

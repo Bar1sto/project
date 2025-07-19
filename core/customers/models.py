@@ -147,6 +147,22 @@ class Promocode(models.Model):
     def __str__(self):
         return f'{self.name}'
     
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        
+        if self.is_active and not self.is_personal:
+            clients = Client.objects.all()
+            
+            for client in clients:
+                PromocodeClient.objects.update_or_create(
+                    client=client,
+                    promocode=self,
+                    defaults={'promocode': self}
+                )
+        elif not self.is_active:
+            PromocodeClient.objects.filter(promocode=self).delete()
+            
+    
     class Meta:
         verbose_name = 'Промокод'
         verbose_name_plural = 'Промокоды'
