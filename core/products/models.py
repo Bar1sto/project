@@ -4,21 +4,6 @@ from django.utils.text import slugify
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 
-class ProductGroup(models.Model):
-    name = models.CharField(
-        max_length=255,
-        verbose_name='Название группы товаров',
-        unique=True
-    )
-    
-    def __str__(self):
-        return self.name
-    
-    class Meta:
-        verbose_name = 'Группа товаров'
-        verbose_name_plural = 'Группы товаров'
-        ordering = ['name']
-    
 class Brand(models.Model):
     name = models.CharField(
         max_length=255,
@@ -86,20 +71,20 @@ class Product(models.Model):
         verbose_name='Бренд',
         related_name='products',
     )
-    group = models.ForeignKey(
-        ProductGroup,
-        on_delete=models.PROTECT,
-        verbose_name='Группа товаров',
-        related_name='products',
-    )
-    is_active = models.BooleanField(
-        verbose_name='Активен',
+    is_sale = models.BooleanField(
+        verbose_name='Распродажный товар',
         default=True,
         db_index=True,
     )
-    is_order = models.BooleanField(
-        verbose_name='Под заказ',
-        default=False
+    is_new = models.BooleanField(
+        verbose_name='Новый товар',
+        default=True,
+        db_index=True,
+    )
+    is_active = models.BooleanField(
+        verbose_name='Отображать в каталоге',
+        default=True,
+        db_index=True,
     )
     slug = models.SlugField(
         'URL-идентификатор',
@@ -137,60 +122,21 @@ class Product(models.Model):
             models.Index(fields=['name', 'brand']),
         ]
         
-    
-class ProductAttribute(models.Model):
-    name = models.CharField(
-        max_length=255,
-        verbose_name='Название характеристики',
-        unique=True
-    )
-    group = models.ForeignKey(
-        ProductGroup,
-        on_delete=models.CASCADE,
-        verbose_name='Группа товаров'
-    )
-    
-    def __str__(self):
-        return f"{self.group} → {self.name}"
-    
-    class Meta:
-        verbose_name = 'Характеристика товара'
-        verbose_name_plural = 'Характеристики товаров'
-        ordering = ['name']
-    
-class ProductAttributeValue(models.Model):
-    product = models.ForeignKey(
-        Product,
-        on_delete=models.CASCADE,
-        verbose_name='Товар'
-    )
-    attribute = models.ForeignKey(
-        ProductAttribute,
-        on_delete=models.CASCADE,
-        verbose_name='Характеристика'
-    )
-    value = models.CharField(
-        max_length=255,
-        verbose_name='Значение'
-    )
-    
-    def __str__(self):
-        return f"{self.attribute}: {self.value}"
-    
-    class Meta:
-        verbose_name = 'Значение характеристики'
-        verbose_name_plural = 'Значения характеристик'
-        unique_together = [['product', 'attribute']] 
-    
 class ProductVariant(models.Model):
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
-        verbose_name='Товар'
+        verbose_name='Товар',
+        related_name='variants'
     )
-    size = models.CharField(
+    size_type = models.CharField(
         max_length=50,
-        verbose_name='Размер',
+        verbose_name='Тип размера',
+        blank=True
+    )
+    size_value = models.CharField(
+        max_length=50,
+        verbose_name='Значение размера',
         blank=True
     )
     color = models.CharField(
@@ -203,11 +149,18 @@ class ProductVariant(models.Model):
         decimal_places=2,
         verbose_name='Цена'
     )
-    
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='В наличии',
+    )
+    is_order = models.BooleanField(
+        verbose_name='Под заказ',
+        default=False
+    ) 
     def __str__(self):
         variant_info = []
-        if self.size:
-            variant_info.append(f"Размер: {self.size}")
+        if self.size_type or self.size_value:
+            variant_info.append(f"Размер: {self.size_type} {self.size_value}")
         if self.color:
             variant_info.append(f"Цвет: {self.color}")
         return f"{self.product} ({', '.join(variant_info)})"
@@ -216,8 +169,7 @@ class ProductVariant(models.Model):
         verbose_name = 'Вариант товара'
         verbose_name_plural = 'Варианты товаров'
     
-    
-    
+
     
     
     

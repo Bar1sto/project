@@ -1,20 +1,11 @@
 from django.contrib import admin
 from orders.models import Order
 from .models import (
-    ProductGroup,
     Brand,
     Category,
     Product,
-    ProductAttribute,
-    ProductAttributeValue,
     ProductVariant,
 )
-
-@admin.register(ProductGroup)
-class ProductGroupAdmin(admin.ModelAdmin):
-    list_display = (
-        'name',
-    )
 
 
 @admin.register(Brand)
@@ -30,7 +21,30 @@ class CategoryAdmin(admin.ModelAdmin):
         'parent',
     )
     
+
+class ProductVariantInline(admin.StackedInline):
+    model = ProductVariant
+    extra = 0
+    readonly_fields = (
+        'size_type',
+        'size_value',
+        'color',
+        'price',
+        'is_active',
+        'is_order',
+        )
+    can_delete = False
+    list_filter = (
+        'size_type',
+        'size_value',
+        'is_active',
+        'is_order',
+    )
+    show_change_link = True
     
+    def get_fields(self, request, obj=None):
+        return('id', 'is_active', 'is_order')
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
@@ -38,7 +52,8 @@ class ProductAdmin(admin.ModelAdmin):
         'category',
         'brand',
         'is_active',
-        'is_order',
+        'is_new',
+        'is_sale',
     )
     
     fieldsets = (
@@ -56,7 +71,6 @@ class ProductAdmin(admin.ModelAdmin):
                 'fields': (
                     'category',
                     'brand',
-                    'group',
                 )
             }
         ),
@@ -64,7 +78,8 @@ class ProductAdmin(admin.ModelAdmin):
             'Детализация товара', {
                 'fields': (
                     'is_active',
-                    'is_order',
+                    'is_sale',
+                    'is_new',
                 )
             }
         ),
@@ -81,20 +96,26 @@ class ProductAdmin(admin.ModelAdmin):
         'name',
         'brand__name',
     ]
-
-
-@admin.register(ProductAttribute)
-class ProductAttributeAdmin(admin.ModelAdmin):
-    list_display = (
-        'name',
-        'group',
-    )
     
-    
-@admin.register(ProductAttributeValue)
-class ProductAttributeValueAdmin(admin.ModelAdmin):
+    list_filter = [
+        'is_active',
+        'is_new',
+        'brand',
+        'category',
+    ]
+
+    inlines = [
+        ProductVariantInline,
+    ]
+
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
     list_display = (
         'product',
-        'attribute',
-        'value',
+        'size_type',
+        'size_value',
+        'color',
+        'price',
+        'is_active',
+        'is_order',
     )
