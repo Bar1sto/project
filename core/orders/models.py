@@ -53,7 +53,9 @@ class Order(models.Model):
     order_total = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        verbose_name='Сумма заказа'
+        verbose_name='Сумма заказа',
+        blank=True,
+        null=True,
     )
     create_at = models.DateField(
         verbose_name='Дата создания заказа',
@@ -103,7 +105,10 @@ class OrderItem(models.Model):
     )
     
     def __str__(self):
-        return f'Товары в заказе'
+        return f'Количетсво: {self.item_quantity}'
+    
+    def total_price(self):
+        return self.product_variant.price * self.item_quantity
     
     class Meta:
         verbose_name = 'Товар в заказе'

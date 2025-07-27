@@ -46,6 +46,10 @@ class OrderAdmin(admin.ModelAdmin):
         'create_at',
     )
     
+    readonly_fields = (
+        'order_total',
+    )
+    
     inlines = (OrderItemInline,)
 
 @admin.register(OrderItem)
