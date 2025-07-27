@@ -93,7 +93,7 @@ class Product(models.Model):
         blank=True
     )
     image = models.ImageField(
-        upload_to='products/',
+        upload_to='products_image/',
         verbose_name='Изображение',
         blank=True
     )
@@ -104,7 +104,7 @@ class Product(models.Model):
     )
     
     def __str__(self):
-        return f"{self.brand} {self.name}"
+        return f"{self.name}"
     
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -163,6 +163,8 @@ class ProductVariant(models.Model):
             variant_info.append(f"Размер: {self.size_type} {self.size_value}")
         if self.color:
             variant_info.append(f"Цвет: {self.color}")
+        if self.price:
+            variant_info.append(f"Цена: {self.price}")
         return f"{self.product} ({', '.join(variant_info)})"
     
     class Meta:

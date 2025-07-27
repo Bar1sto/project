@@ -6,7 +6,8 @@ from products.models import Product, ProductVariant
 class Cart(models.Model):
     client = models.ForeignKey(
         'customers.Client',
-        on_delete=models.CASCADE
+        on_delete=models.CASCADE,
+        verbose_name='Клиент',
     )
     create_at = models.DateField(
         verbose_name='Дата создания корзины',
@@ -25,8 +26,8 @@ class Cart(models.Model):
     )
     
     def __str__(self):
-        return f'{self.pk}'
-    
+       return f'Корзина № {self.pk}'
+   
     def calculate_total(self):
         total = sum(item.get_cost() for item in self.items.all())
         self.cart_total_sum = total
@@ -42,10 +43,12 @@ class Order(models.Model):
     cart = models.ForeignKey(
         Cart,
         on_delete=models.CASCADE,
+        verbose_name='Корзина'
     )
     client = models.ForeignKey(
         'customers.Client',
         on_delete=models.CASCADE,
+        verbose_name='Клиент'
     )
     order_total = models.DecimalField(
         max_digits=10,
@@ -71,7 +74,7 @@ class Order(models.Model):
         )
     
     def __str__(self):
-        return f'{self.pk}'
+        return f'Заказ №{self.pk}'
     
     class Meta:
         verbose_name = 'Заказ'
@@ -82,14 +85,17 @@ class OrderItem(models.Model):
     order = models.ForeignKey(
         Order,
         on_delete=models.CASCADE,
+        verbose_name='Заказ'
     )
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
+        verbose_name='Товар'
     )
     product_variant = models.ForeignKey(
         ProductVariant,
         on_delete=models.CASCADE,
+        verbose_name='Вариант товара'
     )
     item_quantity = models.PositiveIntegerField(
         default=1,
@@ -97,7 +103,7 @@ class OrderItem(models.Model):
     )
     
     def __str__(self):
-        return f'{self.pk}'
+        return f'Товары в заказе'
     
     class Meta:
         verbose_name = 'Товар в заказе'
@@ -108,14 +114,17 @@ class CartItem(models.Model):
     cart = models.ForeignKey(
         Cart,
         on_delete=models.CASCADE,
+        verbose_name='Корзина'
     )
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
+        verbose_name='Товар'
     )
     product_variant = models.ForeignKey(
         ProductVariant,
         on_delete=models.CASCADE,
+        verbose_name='Вариант товара'
     )
     quantity = models.PositiveIntegerField(
         default=1,
@@ -123,7 +132,7 @@ class CartItem(models.Model):
     )
     
     def __str__(self):
-        return f'{self.pk}'
+        return f'Товары в корзине'
     
     def get_cost(self):
         return self.product_variant.price * self.quantity
