@@ -1,6 +1,9 @@
+from decimal import Decimal
 from django.db import models
+from django.dispatch import receiver
 from django.utils.text import slugify
 from django.urls import reverse
+from django.db.models.signals import post_save, post_delete
 from products.models import Product, ProductVariant
 
 class Cart(models.Model):
@@ -78,6 +81,12 @@ class Order(models.Model):
     def __str__(self):
         return f'Заказ №{self.pk}'
     
+    def calculate_total(self):
+        total = Decimal('0.0')
+        for item in self.orderitem_set.all():
+            total += item.total_price()
+        return total
+        
     class Meta:
         verbose_name = 'Заказ'
         verbose_name_plural = 'Заказы'
@@ -107,14 +116,26 @@ class OrderItem(models.Model):
     def __str__(self):
         return f'Количетсво: {self.item_quantity}'
     
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.order.order_total = self.order.calculate_total()
+        self.order.save()
+    
     def total_price(self):
-        return self.product_variant.price * self.item_quantity
+        return self.product_variant.base_price * self.item_quantity
     
     class Meta:
         verbose_name = 'Товар в заказе'
         verbose_name_plural = 'Товары в заказе'
         ordering = ['-pk']
         
+@receiver(post_delete, sender=OrderItem)
+def update_order_on_delete(sender, instance, **kwargs):
+    order = isinstance.order
+    order.order_total = order.calculate_total()
+    order.save()
+    
+
 class CartItem(models.Model):
     cart = models.ForeignKey(
         Cart,

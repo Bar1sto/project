@@ -29,7 +29,8 @@ class ProductVariantInline(admin.StackedInline):
         'size_type',
         'size_value',
         'color',
-        'price',
+        'base_price',
+        'current_price',
         'is_active',
         'is_order',
         )
@@ -115,7 +116,15 @@ class ProductVariantAdmin(admin.ModelAdmin):
         'size_type',
         'size_value',
         'color',
-        'price',
+        'base_price',
         'is_active',
         'is_order',
     )
+    
+    readonly_fields = (
+        'current_price_display',
+    )
+    
+    def current_price_display(self, obj):
+        return obj.current_price
+    current_price_display.short_description = 'Текущая цена'
