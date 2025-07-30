@@ -7,6 +7,26 @@ from .models import (
 )
 
 
+class CartItemInline(admin.StackedInline):
+    model = CartItem
+    
+    extra = 0
+    
+    readonly_fields = (
+        'product_variant',
+        'quantity',
+        )
+    
+    can_delete = False
+    
+    list_filter = (
+        'product_variant',
+    )
+    show_change_link = True
+    
+    def get_fields(self, request, obj = None):
+        return ('id', 'product_variant')
+
 @admin.register(Cart)
 class CartAdmin(admin.ModelAdmin):
     list_display = (
@@ -23,6 +43,10 @@ class CartAdmin(admin.ModelAdmin):
         'client__name',
         'client__surname',
     ]
+    
+    inlines = (
+        CartItemInline,
+    )
 
 
 class OrderItemInline(admin.StackedInline):
@@ -63,6 +87,16 @@ class OrderItemAdmin(admin.ModelAdmin):
         'product',
         'item_quantity',
     )
+    
+    def delete_queryset(self, request, queryset):
+        orders_to_update = set()
+        for item in queryset:
+            orders_to_update.add(item.order)
+        
+        super().delete_queryset(request, queryset)
+        
+        for order in orders_to_update:
+            order.update_total()
     
     
 @admin.register(CartItem)

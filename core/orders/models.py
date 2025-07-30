@@ -1,10 +1,7 @@
 from decimal import Decimal
 from django.db import models
 from django.dispatch import receiver
-from django.utils.text import slugify
-from django.urls import reverse
 from django.db.models.signals import post_save, post_delete
-from products.models import Product, ProductVariant
 from django.db.models import F, Sum
 
 class Cart(models.Model):
@@ -27,10 +24,18 @@ class Cart(models.Model):
         max_digits=10,
         decimal_places=2,
         verbose_name='Сумма корзины',
+        null=True,
+        blank=True,
     )
     
     def __str__(self):
        return f'Корзина № {self.pk}'
+   
+    @property
+    def total_sum(self):
+       return sum(
+           item.total_price for item in self.certitem_set.all()
+       )
     
     def calculate_total(self):
         total = Decimal('0.0')
@@ -39,11 +44,14 @@ class Cart(models.Model):
         return total
     
     def update_total(self):
-        self.cart_total_sum = self.cartitem_set.aggregate(
+        from django.db.models import Sum, F
+        result = self.cartitem_set.aggregate(
             total=Sum(F('product_variant__current_price') * F('quantity'))
-        )['total'] or 0
-        self.save()
-    
+        )
+        self.cart_total_sum = result['total'] or 0
+        self.save(update_fields=['cart_total_sum'])
+        
+        
     class Meta:
         verbose_name = 'Корзина'
         verbose_name_plural = 'Корзины'
@@ -57,12 +65,12 @@ class CartItem(models.Model):
         verbose_name='Корзина'
     )
     product = models.ForeignKey(
-        Product,
+        'products.Product',
         on_delete=models.CASCADE,
         verbose_name='Товар'
     )
     product_variant = models.ForeignKey(
-        ProductVariant,
+        'products.ProductVariant',
         on_delete=models.CASCADE,
         verbose_name='Вариант товара'
     )
@@ -72,8 +80,9 @@ class CartItem(models.Model):
     )
     
     def __str__(self):
-        return f'Товары в корзине'
+        return f'Количество: {self.quantity}'
     
+    @property
     def total_price(self):
         return self.product_variant.current_price * self.quantity
     
@@ -132,10 +141,13 @@ class Order(models.Model):
         return total
     
     def update_total(self):
-        self.order_total = self.orderitem_set.aggregate(
-            total=Sum(F('product_variant__current_price') * F('item_quantity'))
-        )['total'] or 0
-        self.save()
+        try:
+            self.order_total = self.order_items.aggregate(
+                total=Sum(F('product_variant__current_price') * F('item_quantity'))
+            )['total'] or 0
+            self.save(update_fields=['order_total'])
+        except Exception as e:
+            print(f"Ошибка при обновлении суммы заказа: {e}")
         
     class Meta:
         verbose_name = 'Заказ'
@@ -146,15 +158,16 @@ class OrderItem(models.Model):
     order = models.ForeignKey(
         Order,
         on_delete=models.CASCADE,
-        verbose_name='Заказ'
+        verbose_name='Заказ',
+        related_name='orderitem_set',
     )
     product = models.ForeignKey(
-        Product,
+        'products.Product',
         on_delete=models.CASCADE,
         verbose_name='Товар'
     )
     product_variant = models.ForeignKey(
-        ProductVariant,
+        'products.ProductVariant',
         on_delete=models.CASCADE,
         verbose_name='Вариант товара'
     )
@@ -172,6 +185,11 @@ class OrderItem(models.Model):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         self.order.update_total()
+        
+    def delete(self, *args,**kwargs):
+        order = self.order
+        super().delete(*args, **kwargs)
+        order.update_total()
         
     class Meta:
         verbose_name = 'Товар в заказе'

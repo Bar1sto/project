@@ -1,6 +1,8 @@
 from django.db import models
 from django.urls import reverse
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.db.models import F
+from orders.models import Cart, CartItem
 
 
 class Brand(models.Model):
@@ -109,13 +111,30 @@ class Product(models.Model):
         return reverse('product_detail', kwargs={'slug': self.slug})
     
     def save(self, *args, **kwargs):
+        sale_changed = False
+        if self.pk:
+            old_sale = Product.objects.get(pk=self.pk).sale
+            sale_changed = (old_sale != self.sale)
+        
         super().save(*args, **kwargs)
-        self.update_variants_prices()
+        
+        if sale_changed or not self.pk:
+            self.update_variants_prices()
+            self.update_related_carts()
+        
         
     def update_variants_prices(self):
-        variants = self.variants.all()
-        for variant in variants:
-            variant.save()
+        self.variants.all().update(
+            current_price=F('base_price') * (100 - self.sale) / 100
+        )
+
+    def update_related_carts(self):
+        cart_ids = CartItem.objects.filter(
+            product=self
+        ).values_list('cart_id', flat=True).distinct()
+        
+        for cart_id in cart_ids:
+            Cart.objects.get(pk=cart_id).update_total()
     
     class Meta:
         verbose_name = 'Товар'
@@ -151,6 +170,7 @@ class ProductVariant(models.Model):
         max_digits=10,
         decimal_places=2,
         verbose_name='Базовая цена',
+        default=0,
     )
     current_price = models.DecimalField(
         max_digits=10,
@@ -182,7 +202,9 @@ class ProductVariant(models.Model):
        
     @property
     def display_price(self):
-        return f'{self.current_price:.2f} '
+        if self.current_price is None:
+            return "Цена не указана"
+        return f"{float(self.current_price):.2f}"
         
     class Meta:
         verbose_name = 'Вариант товара'
