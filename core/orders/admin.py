@@ -15,6 +15,10 @@ class CartAdmin(admin.ModelAdmin):
         'create_at',
     )
     
+    readonly_fields = (
+        'cart_total_sum',
+    )
+    
     search_fields = [
         'client__name',
         'client__surname',

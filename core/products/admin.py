@@ -57,6 +57,8 @@ class ProductAdmin(admin.ModelAdmin):
         'is_sale',
     )
     
+    save_on_top = True
+    
     fieldsets = (
         (
             'Основная информация товара', {
@@ -117,14 +119,20 @@ class ProductVariantAdmin(admin.ModelAdmin):
         'size_value',
         'color',
         'base_price',
+        'display_price',
         'is_active',
         'is_order',
     )
     
     readonly_fields = (
-        'current_price_display',
+        'display_price',
     )
     
-    def current_price_display(self, obj):
-        return obj.current_price
-    current_price_display.short_description = 'Текущая цена'
+    list_select_related = (
+        'product',
+        )
+    
+    def display_price(self, obj):
+        return obj.display_price
+        
+    display_price.short_description = 'Текущая цена'

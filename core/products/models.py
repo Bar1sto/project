@@ -1,10 +1,6 @@
-from django.core.cache import cache
 from django.db import models
-from django.dispatch import receiver
 from django.urls import reverse
-from django.utils.text import slugify
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.db.models.signals import post_save
 
 
 class Brand(models.Model):
@@ -112,6 +108,15 @@ class Product(models.Model):
     def get_absolute_url(self):
         return reverse('product_detail', kwargs={'slug': self.slug})
     
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.update_variants_prices()
+        
+    def update_variants_prices(self):
+        variants = self.variants.all()
+        for variant in variants:
+            variant.save()
+    
     class Meta:
         verbose_name = 'Товар'
         verbose_name_plural = 'Товары'
@@ -147,6 +152,12 @@ class ProductVariant(models.Model):
         decimal_places=2,
         verbose_name='Базовая цена',
     )
+    current_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name='Текущая цена',
+        editable=False,
+    )
     is_active = models.BooleanField(
         default=True,
         verbose_name='В наличии',
@@ -161,35 +172,18 @@ class ProductVariant(models.Model):
             variant_info.append(f"Размер: {self.size_type} {self.size_value}")
         if self.color:
             variant_info.append(f"Цвет: {self.color}")
-        if self.base_price:
-            variant_info.append(f"Цена: {self.base_price}")
+        if self.current_price:
+            variant_info.append(f"Цена: {self.current_price}")
         return f"{self.product} ({', '.join(variant_info)})"
     
-    @property
-    def current_price(self):
-        cache_key = f'variant_price_{self.id}'
-        price = cache.get(cache_key)
-        if price in None:
-            price = self.base_price * (100 - self.product.sale) / 100
-            cache.set(cache_key, price, timeout=60*60*24)
-        return price    
-    
-    def clear_price_cache(self):
-        cache.delete(f'variant_price_{self.id}')
-        
     def save(self, *args, **kwargs):
-        self.clear_price_cache()
-        super().save(*args, **kwargs)
-    
-    @receiver(post_save, sender=Product)
-    def update_prices_on_discount_change(sender, **kwargs):
-        if 'sale' in kwargs.get('update_fields', []) or kwargs.get('created'):
-            for variant in isinstance.variants.all():
-                variant.clear_price_cache()
+       self.current_price = self.base_price * (100 - self.product.sale) / 100
+       super().save(*args, **kwargs)
+       
+    @property
+    def display_price(self):
+        return f'{self.current_price:.2f} '
         
-        
-    
-    
     class Meta:
         verbose_name = 'Вариант товара'
         verbose_name_plural = 'Варианты товаров'
