@@ -1,5 +1,5 @@
 from django.contrib import admin
-from orders.models import Order
+from orders.models import Cart
 from .models import (
     Client,
     Bonus,
@@ -10,16 +10,15 @@ from .models import (
 
 
 class OrderInline(admin.StackedInline):
-    '''Объект заказов у клиента'''
-    model = Order
+    model = Cart
     extra = 0
-    readonly_fields = ('order_total', 'create_at', 'status')
+    readonly_fields = ('cart_total_sum', 'create_at', 'status')
     can_delete = False
     list_filter = ('status',)
     show_change_link = True
     
     def get_fields(self, request, obj=None):
-        return ('id', 'order_total', 'status')
+        return ('id', 'cart_total_sum', 'status')
 
 class PromocodeClientInline(admin.StackedInline):
     model = PromocodeClient

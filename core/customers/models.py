@@ -1,6 +1,4 @@
 from django.db import models
-from django.urls import reverse
-from django.utils.text import slugify
 from django.utils import timezone
 from django.core.validators import RegexValidator, validate_email
 
@@ -94,7 +92,7 @@ class Bonus(models.Model):
         default=default_expires_at,
     )
     order= models.ForeignKey(
-        'orders.Order',
+        'orders.Cart',
         on_delete=models.CASCADE,
         related_name='bonuses',
         verbose_name='Заказ',
@@ -108,15 +106,18 @@ class Bonus(models.Model):
         return f'{self.client}: {self.amount} (до {self.expires_at.date()})'
     
     @classmethod
-    def create_from_order(cls, order):
-        if not order.client:
+    def create_from_order(cls, cart):
+        if not cart.is_ordered or not cart.client:
+            return None
+        if not cart.total_sum or cart.total_sum <= 0:
             return None
         
-        bonus_amount = order.order_total * Decimal('0.05')
+        bonus_amount = cart.total_sum * Decimal('0.05')
+        
         return cls.objects.create(
-            client=order.client,
+            client=cart.client,
             amount=bonus_amount,
-            order=order,
+            order=cart,
             expires_at=timezone.now() + timezone.timedelta(days=365)
         )
     
