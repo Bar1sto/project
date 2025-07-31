@@ -171,11 +171,13 @@ class Promocode(models.Model):
 class PromocodeClient(models.Model):
     client = models.ForeignKey(
         Client,
-        on_delete=models.CASCADE
+        on_delete=models.CASCADE,
+        verbose_name='Клиент',
     )
     promocode = models.ForeignKey(
         Promocode,
         on_delete=models.CASCADE,
+        verbose_name='Промокод',
     )
     
     def __str__(self):

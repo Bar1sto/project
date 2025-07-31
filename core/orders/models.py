@@ -3,6 +3,8 @@ from django.db import models
 from django.dispatch import receiver
 from django.db.models.signals import post_save, post_delete
 from django.db.models import F, Sum
+from django.db import transaction
+
 
 class Cart(models.Model):
     client = models.ForeignKey(
@@ -141,13 +143,13 @@ class Order(models.Model):
         return total
     
     def update_total(self):
-        try:
-            self.order_total = self.order_items.aggregate(
-                total=Sum(F('product_variant__current_price') * F('item_quantity'))
+         with transaction.atomic():
+            total = self.items.aggregate(
+                total=Sum(F('product_variant__current_price') * F('quantity'))
             )['total'] or 0
-            self.save(update_fields=['order_total'])
-        except Exception as e:
-            print(f"Ошибка при обновлении суммы заказа: {e}")
+            self.__class__.objects.filter(pk=self.pk).update(
+                order_total=total
+            )
         
     class Meta:
         verbose_name = 'Заказ'
@@ -155,11 +157,11 @@ class Order(models.Model):
         ordering = ['-status']
     
 class OrderItem(models.Model):
-    order = models.ForeignKey(
+    parent_order = models.ForeignKey(
         Order,
         on_delete=models.CASCADE,
         verbose_name='Заказ',
-        related_name='orderitem_set',
+        related_name='items',
     )
     product = models.ForeignKey(
         'products.Product',
@@ -187,9 +189,10 @@ class OrderItem(models.Model):
         self.order.update_total()
         
     def delete(self, *args,**kwargs):
-        order = self.order
-        super().delete(*args, **kwargs)
-        order.update_total()
+        with transaction.atomic():
+            order = self.parent_order
+            super().delete(*args, **kwargs)
+            order.update_total()
         
     class Meta:
         verbose_name = 'Товар в заказе'
@@ -198,7 +201,7 @@ class OrderItem(models.Model):
         
 @receiver(post_delete, sender=OrderItem)
 def update_order_on_delete(sender, instance, **kwargs):
-    order = isinstance.order
+    order = isinstance.order_link
     order.order_total = order.calculate_total()
     order.save()
     

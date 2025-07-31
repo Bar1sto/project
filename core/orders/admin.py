@@ -5,6 +5,8 @@ from .models import (
     OrderItem,
     CartItem,
 )
+from django.db import transaction
+
 
 
 class CartItemInline(admin.StackedInline):
@@ -30,6 +32,7 @@ class CartItemInline(admin.StackedInline):
 @admin.register(Cart)
 class CartAdmin(admin.ModelAdmin):
     list_display = (
+        'id',
         'client',
         'cart_total_sum',
         'create_at',
@@ -83,21 +86,22 @@ class OrderAdmin(admin.ModelAdmin):
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
     list_display = (
-        'order',
+        'parent_order',
         'product',
         'item_quantity',
     )
     
+    def delete_model(self, request, obj):
+        obj.delete()
+
     def delete_queryset(self, request, queryset):
-        orders_to_update = set()
-        for item in queryset:
-            orders_to_update.add(item.order)
-        
-        super().delete_queryset(request, queryset)
-        
-        for order in orders_to_update:
-            order.update_total()
-    
+        with transaction.atomic():
+            orders = Order.objects.filter(
+                id__in=queryset.values_list('parent_order_id', flat=True)
+            ).select_for_update()
+            queryset.delete()
+            for order in orders:
+                order.update_total()
     
 @admin.register(CartItem)
 class CartItemAdmin(admin.ModelAdmin):

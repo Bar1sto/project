@@ -90,7 +90,7 @@ class Product(models.Model):
     slug = models.SlugField(
         'URL-идентификатор',
         max_length=255,
-        unique=True,
+        # unique=True,
         blank=True
     )
     image = models.ImageField(
