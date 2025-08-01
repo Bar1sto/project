@@ -12,6 +12,7 @@ from apps.customers.serializers import (
 )
 
 
-class ClientAPIView(generics.ListAPIView):
+class ClientDetailAPIView(generics.RetrieveAPIView):
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
+    
