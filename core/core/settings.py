@@ -16,21 +16,27 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+LOCAL_APPS = [
+    'apps.products',
+    'apps.customers',
+    'apps.orders',
+]
 
-INSTALLED_APPS = [
+DRF_APPS = [
+    'rest_framework',
+    'drf_spectacular',
+]
+
+DJANGO_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'rest_framework',
-    'drf_spectacular',
-    
-    'apps.products',
-    'apps.customers',
-    'apps.orders',
 ]
+
+INSTALLED_APPS = DJANGO_APPS + DRF_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -103,7 +109,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'ru-ru'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Moscow'
 
 USE_I18N = True
 
