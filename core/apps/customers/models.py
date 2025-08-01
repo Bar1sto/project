@@ -52,6 +52,7 @@ class Client(models.Model):
         return f'{self.surname} {self.name}'
     
     class Meta:
+        app_label = 'customers'
         verbose_name = 'Клиент'
         verbose_name_plural = 'Клиенты'
         ordering = ['-id']

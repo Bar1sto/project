@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import (
+from apps.customers.models import (
     Client,
     Bonus,
     Promocode,
@@ -10,14 +10,12 @@ from .models import (
 class ClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
-        fields = [
-            'pk',
+        fields = (
             'surname',
             'name',
             'patronymic',
             'phone_number',
             'email',
             'birthday',
-            'slug',
             'image',
-            ]
+            )

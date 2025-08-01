@@ -1,6 +1,6 @@
 from django.contrib import admin
-from orders.models import Cart
-from .models import (
+from apps.orders.models import Cart
+from apps.customers.models import (
     Client,
     Bonus,
     Promocode,

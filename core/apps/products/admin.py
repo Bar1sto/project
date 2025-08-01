@@ -1,6 +1,5 @@
 from django.contrib import admin
-from orders.models import Cart
-from .models import (
+from apps.products.models import (
     Brand,
     Category,
     Product,

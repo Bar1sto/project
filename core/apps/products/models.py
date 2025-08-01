@@ -2,7 +2,7 @@ from django.db import models
 from django.urls import reverse
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models import F
-from orders.models import Cart, CartItem
+from apps.orders.models import Cart, CartItem
 
 
 class Brand(models.Model):

@@ -3,12 +3,14 @@ import os, sys
 from dotenv import load_dotenv
 
 
+load_dotenv()
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR.parent
 sys.path.insert(0, os.path.join(BASE_DIR, 'apps'))
 
 
-load_dotenv()
 
 SECRET_KEY = os.environ["DJANGO_KEY"]
 
@@ -17,9 +19,9 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 LOCAL_APPS = [
-    'apps.products',
-    'apps.customers',
-    'apps.orders',
+    'apps.products.apps.ProductsConfig',
+    'apps.customers.apps.CustomersConfig',
+    'apps.orders.apps.OrdersConfig',
 ]
 
 DRF_APPS = [
