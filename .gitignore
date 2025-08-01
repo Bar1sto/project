@@ -1,12 +1,18 @@
 /.env
 /venv
+/requirements.txt
 
-.env  
-.env.local  
-*.env  
-__pycache__/  
-*.sqlite3
-*.db
-*.sqlite
+# /core/db.sqlite3
+# /core/apps/clients
+# /core/apps/products_image
 
-/clients
+# /core/__pycache__
+
+# /core/apps/customers/__pycache__
+# /core/apps/customers/migrations
+
+# /core/apps/orders/__pycache__
+# /core/apps/orders/migrations
+
+# /core/apps/products/__pycache__
+# /core/apps/products/migrations
