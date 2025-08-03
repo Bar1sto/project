@@ -1,8 +1,14 @@
-from django.urls import path
-from apps.customers.views import ClientDetailAPIView
+from django.urls import path, include
+from apps.customers.views import (
+    ClientViewSet,
+    )
+from rest_framework.routers import DefaultRouter
 
+router = DefaultRouter()
+router.register(r'clients', ClientViewSet)
 
 urlpatterns = [
-    path('clients/<int:pk>/', ClientDetailAPIView.as_view(), name='client-detail')
+    path('', include(router.urls)),
+    path('id', include(router.urls)),
     
 ]

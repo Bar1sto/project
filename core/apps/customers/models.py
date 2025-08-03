@@ -40,6 +40,7 @@ class Client(models.Model):
         max_length=255,
         unique=True,
         blank=True,
+        null=True,
         verbose_name='Url-идентификатор',
     )
     image = models.ImageField(
@@ -61,10 +62,10 @@ class Client(models.Model):
             models.Index(fields=['email'])
         ]
         
-@property
-def total_bonus(self):
-    active_bonuses = self.bonuses.filter(expires_at__gt=timezone.now())
-    return active_bonuses.aggregate(total=models.Sum('amount'))['total'] or 0
+    @property
+    def total_bonus(self):
+        active_bonuses = self.bonuses.filter(expires_at__gt=timezone.now())
+        return active_bonuses.aggregate(total=models.Sum('amount'))['total'] or 0
         
         
 class Bonus(models.Model):
@@ -175,6 +176,7 @@ class PromocodeClient(models.Model):
         Client,
         on_delete=models.CASCADE,
         verbose_name='Клиент',
+        related_name='promocodes',
     )
     promocode = models.ForeignKey(
         Promocode,

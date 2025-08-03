@@ -8,6 +8,7 @@ class Cart(models.Model):
         'customers.Client',
         on_delete=models.CASCADE,
         verbose_name='Клиент',
+        related_name='carts',
     )
     create_at = models.DateField(
         verbose_name='Дата создания корзины',

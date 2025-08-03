@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from rest_framework import generics
+from rest_framework import generics, viewsets
 from apps.customers.models import (
     Client,
     Bonus,
@@ -12,7 +12,7 @@ from apps.customers.serializers import (
 )
 
 
-class ClientDetailAPIView(generics.RetrieveAPIView):
+class ClientViewSet(viewsets.ModelViewSet):
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
     
