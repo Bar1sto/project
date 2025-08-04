@@ -2,6 +2,8 @@ from rest_framework import serializers
 from apps.products.models import (
     Product,
     ProductVariant,
+    Category,
+    Brand,
 )
 
 
@@ -17,10 +19,33 @@ class ProductVariantSerializer(serializers.ModelSerializer):
             'is_order',
         )
         
+class BrandSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Brand
+        fields = (
+            'name'
+        )
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = (
+            'name',
+            'parent',
+            )
+
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(
         many=True,
         read_only=True,
+    )
+    brand = serializers.SlugRelatedField(
+        read_only=True,
+        slug_field='name',
+    )
+    category = serializers.SlugRelatedField(
+        read_only=True,
+        slug_field='name',
     )
     
     class Meta:

@@ -33,12 +33,12 @@ class Category(models.Model):
         verbose_name='Родительская категория'
     )
     
-    slug = models.SlugField(
-        'URL-идентификатор',
-        max_length=255,
-        unique=True,
-        blank=True
-    )
+    # slug = models.SlugField(
+    #     'URL-идентификатор',
+    #     max_length=255,
+    #     unique=True,
+    #     blank=True
+    # )
     
     def __str__(self):
         if self.parent:

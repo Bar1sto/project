@@ -30,6 +30,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'surname',
             'name',
             'phone_number',
+            'email',
             'birthday',
             'image',
             'total_bonus',
