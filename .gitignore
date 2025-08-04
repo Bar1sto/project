@@ -1,6 +1,7 @@
 /.env
 /venv
 /requirements.txt
+/.DS_Store
 
 # /core/db.sqlite3
 # /core/apps/clients
