@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import RegexValidator, validate_email
 
@@ -6,6 +7,14 @@ from decimal import Decimal
 
         
 class Client(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='client',
+        null=True,
+        blank=True,
+        verbose_name='Пользователь'
+    )
     surname = models.CharField(
         max_length=255,
         verbose_name='Фамилия клиента',

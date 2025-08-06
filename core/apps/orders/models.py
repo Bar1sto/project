@@ -96,7 +96,8 @@ class CartItem(models.Model):
     cart = models.ForeignKey(
         Cart,
         on_delete=models.CASCADE,
-        verbose_name='Корзина'
+        verbose_name='Корзина',
+        related_name='cart_items',
     )
     product = models.ForeignKey(
         'products.Product',
@@ -128,4 +129,3 @@ class CartItem(models.Model):
         verbose_name = 'Товар в корзине'
         verbose_name_plural = 'Товары в корзине'
         ordering = ['-pk']
-    

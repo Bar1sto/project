@@ -43,6 +43,10 @@ class CartAdmin(admin.ModelAdmin):
         'client__surname',
     ]
     
+    list_filter = (
+        'status',
+    )
+    
     inlines = (
         CartItemInline,
     )

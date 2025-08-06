@@ -59,6 +59,7 @@ class ClientAdmin(admin.ModelAdmin):
                     'surname',
                     'name',
                     'patronymic',
+                    'user',
                 )
             }
         ),
