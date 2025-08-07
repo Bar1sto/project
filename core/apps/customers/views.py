@@ -1,18 +1,22 @@
-from django.shortcuts import render
-from rest_framework import generics, viewsets
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 from apps.customers.models import (
     Client,
-    Bonus,
-    Promocode,
-    PromocodeClient,
-    PromocodeUsage,
 )
 from apps.customers.serializers import (
     ClientSerializer
 )
 
 
-class ClientViewSet(viewsets.ModelViewSet):
-    queryset = Client.objects.all()
-    serializer_class = ClientSerializer
+class ClientApiView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        client = request.user.client
+        serializer = ClientSerializer(client)
+        return Response(serializer.data)
     
+    
+    
+class CLientRegisterView(APIView):
+    pass

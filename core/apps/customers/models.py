@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
-from django.core.validators import RegexValidator, validate_email
+from django.core.validators import RegexValidator
 
 from decimal import Decimal
 
@@ -37,11 +37,6 @@ class Client(models.Model):
             message='Номер телефона должен быть в формате 7991234567'
         )]
     )
-    email = models.EmailField(
-        unique=True,
-        verbose_name='Почта клиента',
-        validators=[validate_email],
-    )
     birthday = models.DateField(
         verbose_name='Дата рождения'
     )
@@ -68,7 +63,6 @@ class Client(models.Model):
         ordering = ['-id']
         indexes = [
             models.Index(fields=['surname', 'name']),
-            models.Index(fields=['email'])
         ]
         
     @property

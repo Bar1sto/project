@@ -32,7 +32,6 @@ class PromocodeClientInline(admin.StackedInline):
     
     
 class BonusInline(admin.StackedInline):
-    '''Объект бонусов у клиента'''
     model = Bonus
     extra = 0
     readonly_fields = ('amount', 'created_at', 'expires_at')
@@ -45,12 +44,15 @@ class BonusInline(admin.StackedInline):
     
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    '''Класс клиенты'''
     list_display = (
         'name',
         'surname',
-        'email',
+        'get_email',
         )
+    
+    readonly_fields = [
+        'get_email',
+    ]
     
     fieldsets = (
         (
@@ -67,7 +69,7 @@ class ClientAdmin(admin.ModelAdmin):
             'Персональные данные', {
                 'fields': (
                     'phone_number',
-                    'email',
+                    'get_email',
                     'birthday',
                 )
             }
@@ -84,7 +86,7 @@ class ClientAdmin(admin.ModelAdmin):
     search_fields = [
         'surname',
         'phone_number',
-        'email',
+        'user__email',
     ]
     
     inlines = [
@@ -92,6 +94,10 @@ class ClientAdmin(admin.ModelAdmin):
         PromocodeClientInline,
         OrderInline
         ]
+    
+    def get_email(self, obj):
+        return obj.user.email if obj.user else None
+    get_email.short_description = 'Почта'
     
 
 @admin.register(Bonus)

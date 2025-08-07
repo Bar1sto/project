@@ -1,9 +1,9 @@
 from rest_framework import serializers
+from django.contrib.auth.models import User
 from apps.customers.models import (
     Client,
     Bonus,
 )
-
 
 
 class BonusSerializer(serializers.ModelSerializer):
@@ -23,7 +23,10 @@ class ClientSerializer(serializers.ModelSerializer):
         many=True,
         read_only=True,
     )
-
+    email = serializers.EmailField(
+        source='user.email',
+        read_only=True,
+    )
     class Meta:
         model = Client
         fields = (
