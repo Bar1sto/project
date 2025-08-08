@@ -1,5 +1,6 @@
-from rest_framework import serializers
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import serializers, exceptions
+from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from django.contrib.auth.models import User
 from apps.customers.models import (
@@ -45,10 +46,11 @@ class ClientSerializer(serializers.ModelSerializer):
     def get_total_bonus(self, obj):
         return obj.total_bonus
 
+User = get_user_model()
 
 class RegisterSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(
-        source='user.email',
+        required=True,
     )
     password = serializers.CharField(
         write_only=True,
@@ -66,10 +68,25 @@ class RegisterSerializer(serializers.ModelSerializer):
             'password',
         )
     
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError(
+                "Пользователь с такой почтой уже существует!"
+            )
+        return value
+    
+    # def validate(self, attrs):
+    #     if not attrs.get('password'):
+    #         raise serializers.ValidationError(
+    #            { 
+    #             "password": "Пароль обязателен для регистрации"
+    #             }
+    #         )
+    #     return attrs
+    
     def create(self, validated_data):
-        user_data = validated_data.pop('user', {})
-        email = user_data.get('email')
-        password = validated_data.pop('password', None)
+        email = validated_data.pop('email')
+        password = validated_data.pop('password')
         
         user = User.objects.create_user(
             email=email,
@@ -79,35 +96,15 @@ class RegisterSerializer(serializers.ModelSerializer):
         
         client = Client.objects.create(
             user=user,
-            **validated_data,
+            **validated_data
         )
-        
-        return client 
+        return client
     
-    def validate_email(self, attrs):
-        user_data = attrs.get('user', {})
-        email = user_data.get('email')
-        password = attrs.get('password')
-        
-        if not email:
-            raise serializers.ValidationError({
-                "email": "Почта обязательая для регистарции"
-            })
-        if not password:
-            raise serializers.ValidationError(
-               { 
-                "password": "Пароль обязателен для регистрации"
-                }
-            )
-        return attrs
-    
-    def get_tokens_user(user):
-        if not user.is_active:
-            raise AuthenticationFailed('Пользователь неактивен')
-        
-        refresh = RefreshToken.for_user(user)
-        
-        return{
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
+    def to_representation(self, instance):
+        return {
+            'id': instance.id,
+            'name': instance.name,
+            'surname': instance.surname,
+            'phone_number': instance.phone_number,
+            'message': 'Регистрация прошла успешно'
         }
