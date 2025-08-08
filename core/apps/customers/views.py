@@ -16,6 +16,17 @@ class ClientApiView(APIView):
         serializer = ClientSerializer(client)
         return Response(serializer.data)
     
+    def put(self, request):
+        client = request.user.client
+        serializer = ClientSerializer(
+            client,
+            data=request.data,
+            partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
     
     
 class CLientRegisterView(APIView):
