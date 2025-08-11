@@ -1,17 +1,13 @@
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.generics import CreateAPIView
+from rest_framework import generics
 from rest_framework.views import APIView
 from apps.customers.models import (
     Client,
-    
-    
 )
 from apps.customers.serializers import (
     ClientSerializer,
-    RegisterSerializer,
-
-    
+    RegisterSerializer,   
 )
 
 
@@ -35,7 +31,7 @@ class ClientApiView(APIView):
         return Response(serializer.errors, status=400)
     
     
-class ClientRegisterView(CreateAPIView):
+class ClientRegisterView(generics.CreateAPIView):
     queryset = Client.objects.all()
     serializer_class = RegisterSerializer
     

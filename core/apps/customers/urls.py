@@ -4,8 +4,9 @@ from apps.customers.views import (
     ClientRegisterView,
     )
 
+app_name = 'customers'
 
 urlpatterns = [
-    path('customers/', ClientApiView.as_view()),
+    path('me/', ClientApiView.as_view(), name='client_me'),
     path('register/', ClientRegisterView.as_view(), name='register_client'),
 ]

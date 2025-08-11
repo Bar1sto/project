@@ -27,6 +27,7 @@ class Client(models.Model):
         max_length=255,
         verbose_name='Отчество клиента',
         null=True,
+        blank=True,
     )
     phone_number = models.CharField(
         max_length=12,
@@ -39,13 +40,6 @@ class Client(models.Model):
     )
     birthday = models.DateField(
         verbose_name='Дата рождения'
-    )
-    slug = models.SlugField(
-        max_length=255,
-        unique=True,
-        blank=True,
-        null=True,
-        verbose_name='Url-идентификатор',
     )
     image = models.ImageField(
         upload_to='clients/',

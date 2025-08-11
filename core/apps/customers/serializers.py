@@ -1,7 +1,6 @@
-from rest_framework import serializers, exceptions
+from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-from rest_framework_simplejwt.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from apps.customers.models import (
     Client,
@@ -75,14 +74,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             )
         return value
     
-    # def validate(self, attrs):
-    #     if not attrs.get('password'):
-    #         raise serializers.ValidationError(
-    #            { 
-    #             "password": "Пароль обязателен для регистрации"
-    #             }
-    #         )
-    #     return attrs
     
     def create(self, validated_data):
         email = validated_data.pop('email')
@@ -101,10 +92,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         return client
     
     def to_representation(self, instance):
+        refresh = RefreshToken.for_user(instance.user)
         return {
             'id': instance.id,
             'name': instance.name,
             'surname': instance.surname,
             'phone_number': instance.phone_number,
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
             'message': 'Регистрация прошла успешно'
         }
