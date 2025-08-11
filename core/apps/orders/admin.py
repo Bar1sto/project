@@ -1,4 +1,4 @@
-from datetime import timezone
+from django.utils import timezone
 from django.contrib import admin
 from apps.orders.models import (
     Cart,

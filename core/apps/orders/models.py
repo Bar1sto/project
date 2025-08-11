@@ -1,8 +1,8 @@
-from datetime import timezone
+from django.utils import timezone
 from decimal import Decimal
 from django.db import models
 from django.db.models import F, Sum
-from apps.customers.services import BonusService
+from apps.customers.models import Bonus
 
 
 class Cart(models.Model):
@@ -43,7 +43,7 @@ class Cart(models.Model):
     CHOICES_STATUS = [
         ('draft', 'Черновик'),
         ('completed', 'Выполнен'),
-        ('not_completed', 'Невыполнен'),
+        ('not_completed', 'Не выполнен'),
     ]
     status = models.CharField(
         choices=CHOICES_STATUS,
@@ -61,48 +61,45 @@ class Cart(models.Model):
     
     @property
     def total_sum(self):
-       return sum(
-           item.total_price for item in self.cart_items.all()
-       )
-    
+       return self.calculate_total()
+   
     def calculate_total(self):
-        total = Decimal('0.0')
-        for item in self.cart_items.all():
-            total += item.total_price()
-        return total
+        result = self.cart_items.aggregate(
+            total = Sum(F('product_variant__current_price') * F('quantity'))
+        )
+        return Decimal(result['total']) if result['total'] is not None else Decimal('0')
     
     def update_total(self):
-        result = self.cart_items.aggregate(
-            total=Sum(F('product_variant__current_price') * F('quantity'))
-        )
-        self.cart_total_sum = result['total'] or 0
+        self.cart_total_sum = self.total_sum
         self.save(update_fields=['cart_total_sum'])
-    
+
     def save(self, *args, **kwargs):
-        if self.pk:
-            old_cart = Cart.objects.get(
-                pk=self.pk
-            )
-            if old_cart.status == 'draft' and self.status == 'not_completed':
-                self.is_ordered = True
-                self.ordered_at = timezone.now()
-                
-                super().save(*args, **kwargs)
-                self.create_bonuses()
-                return
-            super().save(*args, **kwargs)
-            
-        # if self.is_ordered and not self.pk:
-        #     self.status = 'not_completed'
-        # elif self.is_ordered:
-        #     original = Cart.objects.get(pk=self.pk)
-        #     if not original.is_ordered and self.is_ordered:
-        #         self.status = 'not_completed'
-                
-        # super().save(*args, **kwargs)
+        old_status = Cart.objects.get(pk=self.pk).status if self.pk else None
         
-    def create_bonuses(self):
-        BonusService.create_from_order(self)
+        super().save(*args, **kwargs)
+        
+        if self.status == 'not_completed' and old_status != 'not_completed':
+            self.is_ordered = True
+            self.ordered_at = timezone.now()
+            
+            Cart.objects.filter(pk=self.pk).update(
+                is_ordered=True,
+                ordered_at=timezone.now()
+            )
+            
+            if hasattr(self, '_creating_bonus'):
+                return
+                
+            self._creating_bonus = True
+            try:
+                bonus_amount = self.total_sum * Decimal('0.05')
+                Bonus.objects.create(
+                    client=self.client,
+                    amount=bonus_amount,
+                    order=self,
+                    expires_at=timezone.now() + timezone.timedelta(days=365))
+            finally:
+                del self._creating_bonus
         
         
     class Meta:

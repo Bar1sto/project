@@ -111,9 +111,9 @@ class BonusAdmin(admin.ModelAdmin):
         
     )
     
-    # readonly_fields = (
-    #     'amount',
-    # )
+    readonly_fields = (
+        'amount',
+    )
     
     list_filter = [
         'is_active',
