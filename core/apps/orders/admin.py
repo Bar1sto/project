@@ -1,9 +1,12 @@
+from datetime import timezone
 from django.contrib import admin
 from apps.orders.models import (
     Cart,
     CartItem,
 )
 
+
+admin.site.register(CartItem)
 
 class CartItemInline(admin.StackedInline):
     model = CartItem
@@ -37,7 +40,7 @@ class CartAdmin(admin.ModelAdmin):
     readonly_fields = (
         'cart_total_sum',
     )
-    
+
     search_fields = [
         'client__name',
         'client__surname',
@@ -50,3 +53,13 @@ class CartAdmin(admin.ModelAdmin):
     inlines = (
         CartItemInline,
     )
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            old_status = Cart.objects.get(
+                pk=obj.pk
+            ).status
+            if old_status == 'draft' and obj.status == 'not_completed':
+                obj.is_ordered = True
+                obj.ordered_at = timezone.now()
+        super().save_model(request, obj, form, change)

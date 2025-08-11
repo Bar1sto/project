@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.db import transaction
 from django.contrib.auth.models import User
 from apps.customers.models import (
     Client,
@@ -74,22 +75,32 @@ class RegisterSerializer(serializers.ModelSerializer):
             )
         return value
     
-    
+    @transaction.atomic
     def create(self, validated_data):
-        email = validated_data.pop('email')
-        password = validated_data.pop('password')
+        try:
+            email = validated_data.pop('email')
+            password = validated_data.pop('password')
+            
+            if User.objects.filter(
+                email=email
+            ).exists():
+                raise serializers.ValidationError(
+                    {"email": "Пользователь с такой почтой уже существует!"}
+                )
         
-        user = User.objects.create_user(
-            email=email,
-            username=email,
-            password=password,
-        )
+            user = User.objects.create_user(
+                email=email,
+                username=email,
+                password=password,
+            )
         
-        client = Client.objects.create(
-            user=user,
-            **validated_data
-        )
-        return client
+            client = Client.objects.create(
+                user=user,
+                **validated_data
+            )
+            return client
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
     
     def to_representation(self, instance):
         refresh = RefreshToken.for_user(instance.user)

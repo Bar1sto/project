@@ -23,7 +23,7 @@ class OrderInline(admin.StackedInline):
 class PromocodeClientInline(admin.StackedInline):
     model = PromocodeClient
     extra = 0
-    readonly_fields = ('promocode',)
+    readonly_fields = ('promocode', )
     can_delete = False
     show_change_link = True
     
@@ -111,9 +111,9 @@ class BonusAdmin(admin.ModelAdmin):
         
     )
     
-    readonly_fields = (
-        'amount',
-    )
+    # readonly_fields = (
+    #     'amount',
+    # )
     
     list_filter = [
         'is_active',
@@ -128,6 +128,7 @@ class PromocodeAdmin(admin.ModelAdmin):
         'last_day',
         'is_active',
         'is_personal',
+        
     )
     
     list_filter = [
