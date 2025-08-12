@@ -1,38 +1,49 @@
-from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import generics
-from rest_framework.views import APIView
+from rest_framework.generics import GenericAPIView
+from rest_framework import mixins
 from apps.customers.models import (
     Client,
 )
 from apps.customers.serializers import (
     ClientSerializer,
-    RegisterSerializer,   
+    ClientRegisterSerializer,
+    ClientUpdateSerializer,
 )
 
 
-class ClientApiView(APIView):
+class ClientRetrieveView(
+    mixins.RetrieveModelMixin,
+    GenericAPIView
+):
     permission_classes = [IsAuthenticated]
-    def get(self, request):
-        client = request.user.client
-        serializer = ClientSerializer(client)
-        return Response(serializer.data)
-    
-    def put(self, request):
-        client = request.user.client
-        serializer = ClientSerializer(
-            client,
-            data=request.data,
-            partial=True
-        )
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
-    
-    
-class ClientRegisterView(generics.CreateAPIView):
+    serializer_class = ClientSerializer
     queryset = Client.objects.all()
-    serializer_class = RegisterSerializer
     
+    def get(self, request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
+
+
+class ClientUpdateView(
+    mixins.UpdateModelMixin,
+    GenericAPIView
+):
+    serializer_class = ClientUpdateSerializer
+
+    def get_queryset(self):
+        return Client.objects.filter(
+            user=self.request.user
+        )
+    
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+    
+    
+class ClientRegisterView(mixins.CreateModelMixin, GenericAPIView):
+    serializer_class = ClientRegisterSerializer
+    queryset = Client.objects.all()
+    
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+    
+
     
