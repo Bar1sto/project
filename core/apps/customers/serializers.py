@@ -184,6 +184,7 @@ class ClientRegisterSerializer(serializers.ModelSerializer):
 
 class ClientUpdateSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(
+        source='user.email',
         required=True,
     )
     class Meta:

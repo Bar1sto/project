@@ -199,22 +199,17 @@ class Promocode(models.Model):
     def __str__(self):
         return f'{self.name}'
     
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
+    def clean(self):
+        if self.amount and self.sale:
+            raise ValidationError(
+                'Укажите либо процентную скидку, либо фиксированную, но не обе сразу!'
+            )
+        if self.amount is not None and not (1 <= self.amount <= 100):
+            raise ValidationError(
+                'Процентная ставка должна быть в диапозоне от 1 до 100!'
+            )
+            
         
-        if self.is_active and not self.is_personal:
-            clients = Client.objects.all()
-            
-            for client in clients:
-                PromocodeClient.objects.update_or_create(
-                    client=client,
-                    promocode=self,
-                    defaults={'promocode': self}
-                )
-        elif not self.is_active:
-            PromocodeClient.objects.filter(promocode=self).delete()
-            
-    
     class Meta:
         verbose_name = 'Промокод'
         verbose_name_plural = 'Промокоды'
@@ -259,6 +254,12 @@ class PromocodeUsage(models.Model):
         return f'{self.client} {self.promocode}'
     
     class Meta:
+        unique_together = [
+            (
+                'client',
+                'promocode',
+            )
+        ]
         verbose_name = 'Использрованный промокод'
         verbose_name_plural = 'Использованные промокоды'
         ordering = ['-used_at']

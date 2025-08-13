@@ -6,3 +6,5 @@ class CustomersConfig(AppConfig):
     name = 'apps.customers'
     verbose_name = 'Клиенты'
     
+    def ready(self):
+        from . import signals

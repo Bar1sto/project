@@ -1,5 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
+from drf_yasg import openapi
 import os, sys
 from dotenv import load_dotenv
 
@@ -27,7 +28,7 @@ LOCAL_APPS = [
 
 DRF_APPS = [
     'rest_framework',
-    'drf_spectacular',
+    'drf_yasg',
 ]
 
 DJANGO_APPS = [
@@ -52,10 +53,23 @@ MIDDLEWARE = [
 ]
 
 REST_FRAMEWORK = {
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     )
+}
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type':'apiKey',
+            'in': 'header',
+            'name': 'Authorization',
+            'description': 'JWT Authorization header using the Bearer scheme. Example: "Bearer {token}"'
+        }
+    }
 }
 
 SIMPLE_JWT = {
@@ -63,17 +77,6 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH-TOKENS': True,
 }
-
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'Hockey shop77 API',
-    'DESCRIPTION': 'API',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'SWAGGER_UI_DIST': 'SIDECAR',
-    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
-    'REDOC_DIST': 'SIDECAR',
-}
-
 
 ROOT_URLCONF = 'core.urls'
 
@@ -128,8 +131,12 @@ USE_I18N = True
 USE_TZ = True
 
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [
+    BASE_DIR / "STATIC",
+]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 
 # AUTH_USER_MODEL = 'apps.customers.Client'
