@@ -29,6 +29,7 @@ LOCAL_APPS = [
 DRF_APPS = [
     'rest_framework',
     'drf_yasg',
+    'rest_framework_simplejwt',
 ]
 
 DJANGO_APPS = [
@@ -53,29 +54,33 @@ MIDDLEWARE = [
 ]
 
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
 }
 
 SWAGGER_SETTINGS = {
+    'USE_SESSION_AUTH': False,
     'SECURITY_DEFINITIONS': {
         'Bearer': {
-            'type':'apiKey',
-            'in': 'header',
+            'type': 'apiKey',
             'name': 'Authorization',
-            'description': 'JWT Authorization header using the Bearer scheme. Example: "Bearer {token}"'
+            'in': 'header',
+            'description': 'Введи: Bearer <token>'
         }
-    }
+    },
+    'USE_SESSION_AUTH': False,
 }
 
+
 SIMPLE_JWT = {
+    'AUTH_HEADER_TYPES': ('Bearer',),
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH-TOKENS': True,
+    'ROTATE_REFRESH_TOKENS': True,
 }
 
 ROOT_URLCONF = 'core.urls'
