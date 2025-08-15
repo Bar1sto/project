@@ -1,5 +1,7 @@
 from django.db import transaction, IntegrityError
 from django.utils import timezone
+from django.contrib.auth import get_user_model
+from rest_framework.exceptions import ValidationError
 from decimal import Decimal
 from apps.customers.models import (
     Client,
@@ -8,6 +10,40 @@ from apps.customers.models import (
     PromocodeClient,
 )
 
+
+User = get_user_model()
+
+@transaction.atomic
+def register_client(validated_date: dict) -> Client:
+    try:
+        email = validated_date.pop('email')
+        password = validated_date.pop('password')
+        
+        user = User.objects.create_user(
+            email=email,
+            username=email,
+            password=password
+        )
+        
+        client = Client.objects.create(
+            user=user,
+            **validated_date
+        )
+        
+        return client
+    except Exception as e:
+        raise ValidationError(str(e))
+
+
+def update_client(instance, validated_data):
+    for field, value in validated_data.items():
+        setattr(
+            instance,
+            field,
+            value
+        )
+    instance.save()     
+    return instance
 
 def calc_price_with_promocode(cart_total, code, client):
     today = timezone.now().date()
@@ -72,3 +108,4 @@ def remove_promocode_from_all_clients(promocode):
     PromocodeClient.objects.filter(
         promocode=promocode,
     ).delete()
+    

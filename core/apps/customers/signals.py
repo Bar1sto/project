@@ -2,8 +2,13 @@ from django.db.models.signals import (
     post_save,
     post_delete
 )
-from django.dispatch import receiver
+from django.dispatch import receiver, Signal
 from django.db import transaction
+from apps.customers.serializers import (
+    ClientSerializer,
+    ClientRegisterSerializer,
+    ClientUpdateSerializer,
+)
 from apps.customers.models import (
     Promocode,
     PromocodeClient,
@@ -26,3 +31,5 @@ def promocode_post_save(instance: Promocode, created, **kwargs):
 @receiver(post_delete, sender=Promocode)
 def promocode_post_delete(sender, instance: Promocode, **kwargs):
     remove_promocode_from_all_clients(instance)
+    
+# client_registered = Signal(providing_args=["client"])

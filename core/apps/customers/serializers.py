@@ -7,13 +7,21 @@ from django.core.validators import (
     MinLengthValidator,
     MaxLengthValidator
     )
-from django.db import transaction
+from apps.customers.validators import (
+    validate_email_unique,
+    validate_password_match,
+    validate_phone_number_unique,
+)
 from django.contrib.auth.models import User
 from apps.customers.models import (
     Client,
     Bonus,
 )
 import re
+from apps.customers.services import (
+    register_client,
+    update_client,
+    )
 
 
 class BonusSerializer(serializers.ModelSerializer):
@@ -100,75 +108,19 @@ class ClientRegisterSerializer(serializers.ModelSerializer):
         )
     
     def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError(
-                "Пользователь с такой почтой уже существует!"
-            )
-        return value
+       return validate_email_unique(value)
     
     def validate(self, attrs: list) -> list:
         password = attrs.get('password')
         password2 = attrs.pop('password2', None)
-        
-        if password != password2:
-            raise serializers.ValidationError(
-                {
-                    "password2": "Пароли должны совпадать!"
-                }
-            )
-        try:
-            validate_password(password)
-        except serializers.ValidationError as e: 
-            raise serializers.ValidationError(
-            {
-                "password": e.messages
-            }
-        )
-        
-        return attrs
+        return validate_password_match(password, password2)
         
     def validate_phone_number(self, value):
-        digits = re.sub(
-            r'\D',
-            '',
-            value,
-        )
-        
-        if digits.startswith('8'):
-            digits = '7' + digits[1:]
-        if not digits.startswith('7'):
-            raise serializers.ValidationError(
-                'Номер телефона должен начинаться с 7 или 8'
-            )
-        phone_number = '+' + digits
-        
-        if Client.objects.filter(
-            phone_number=phone_number
-            ).exists():
-            raise serializers.ValidationError(
-                'Такой номер телефона уже существует!'
-            )
-        return phone_number
+        return validate_phone_number_unique(value)
     
-    @transaction.atomic
     def create(self, validated_data):
-        try:
-            email = validated_data.pop('email')
-            password = validated_data.pop('password')
-                
-            user = User.objects.create_user(
-                email=email,
-                username=email,
-                password=password,
-            )
-            
-            client = Client.objects.create(
-                user=user,
-                **validated_data
-            )
-            return client     
-        except Exception as e:
-            raise serializers.ValidationError(str(e))
+        client = register_client(validated_data)
+        return client
     
     def to_representation(self, instance):
         refresh = RefreshToken.for_user(instance.user)
@@ -181,6 +133,7 @@ class ClientRegisterSerializer(serializers.ModelSerializer):
             'refresh': str(refresh),
             'message': 'Регистрация прошла успешно'
         }
+    
 
 class ClientUpdateSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(
@@ -232,21 +185,12 @@ class ClientUpdateSerializer(serializers.ModelSerializer):
             return phone_number
         
     def update(self, instance, validated_data):
-        instance.surname = validated_data.get('surname',instance.surname)
-        instance.name = validated_data.get('name', instance.name)
-        instance.patronymic = validated_data.get('patronymic', instance.patronymic)
-        instance.phone_number = validated_data.get('phone_number', instance.phone_number)
-        instance.birthday = validated_data.get('birthday', instance.birthday)
-        instance.image = validated_data.get('image', instance.image)
-        
-        instance.save()
-        
+        user_data = validated_data.pop('user', {})
+        instance = update_client(instance, validated_data)
         user = instance.user
-        email = validated_data.get('email', None)
-        
-        if email and user.email != email:
-            user.email = email
-            user.username = email
+        if 'email' in user_data and user.email != user_data['email']:
+            user.email = user_data['email']
+            user.username = user_data['email']
             user.save()
-        
+            
         return instance

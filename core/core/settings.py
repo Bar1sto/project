@@ -60,6 +60,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'EXCEPTION_HANDLER': 'core.apps.customers.exceptions.custom_exception_handler',
 }
 
 SWAGGER_SETTINGS = {
