@@ -1,5 +1,6 @@
 from django.db import models
 from django.urls import reverse
+from django.template.defaultfilters import slugify
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models import F
 from apps.orders.models import Cart, CartItem
@@ -32,13 +33,12 @@ class Category(models.Model):
         blank=True,
         verbose_name='Родительская категория'
     )
-    
-    # slug = models.SlugField(
-    #     'URL-идентификатор',
-    #     max_length=255,
-    #     unique=True,
-    #     blank=True
-    # )
+    slug = models.SlugField(
+        'URL-идентификатор',
+        max_length=255,
+        blank=True,
+        db_index=True,
+    )
     
     def __str__(self):
         if self.parent:
@@ -88,10 +88,10 @@ class Product(models.Model):
         db_index=True,
     )
     slug = models.SlugField(
-        'URL-идентификатор',
+        verbose_name='URL-идентификатор',
         max_length=255,
         # unique=True,
-        blank=True
+        blank=True,
     )
     image = models.ImageField(
         upload_to='products_image/',
@@ -103,19 +103,26 @@ class Product(models.Model):
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)]
     )
+    price = models.DecimalField(
+        verbose_name='Цена для отображения',
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
     
     def __str__(self):
         return f"{self.name}"
         
     def get_absolute_url(self):
-        return reverse('product_detail', kwargs={'slug': self.slug})
+        return reverse('product', kwargs={'product_slug': self.slug})
     
     def save(self, *args, **kwargs):
         sale_changed = False
         if self.pk:
             old_sale = Product.objects.get(pk=self.pk).sale
             sale_changed = (old_sale != self.sale)
-        
+    
         super().save(*args, **kwargs)
         
         if sale_changed or not self.pk:

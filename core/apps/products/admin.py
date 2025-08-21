@@ -65,6 +65,7 @@ class ProductAdmin(admin.ModelAdmin):
                     'name',
                     'description',
                     'sale',
+                    'price',
                 )
             }
         ),

@@ -1,4 +1,4 @@
-from django.db import transaction, IntegrityError
+from django.db import transaction
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from rest_framework.exceptions import ValidationError

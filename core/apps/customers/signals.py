@@ -4,11 +4,6 @@ from django.db.models.signals import (
 )
 from django.dispatch import receiver, Signal
 from django.db import transaction
-from apps.customers.serializers import (
-    ClientSerializer,
-    ClientRegisterSerializer,
-    ClientUpdateSerializer,
-)
 from apps.customers.models import (
     Promocode,
     PromocodeClient,

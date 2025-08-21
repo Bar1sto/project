@@ -2,9 +2,10 @@
 /venv
 /requirements.txt
 /.DS_Store
+/core/apps/clients
+/STATIC
 
 # /core/db.sqlite3
-# /core/apps/clients
 # /core/apps/products_image
 
 # /core/__pycache__

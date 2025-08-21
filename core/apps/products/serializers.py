@@ -62,3 +62,12 @@ class ProductSerializer(serializers.ModelSerializer):
             'sale',
             'variants',
         )
+        
+class ProductListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = (
+            'name',
+            'price',
+            'image',
+        )
