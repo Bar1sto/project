@@ -38,7 +38,35 @@ def make_unicode_slug(base_slug: str, *, model: Type[models.Model], slug_field: 
         return base
     
     existing = list(
-        manager.filter(**{f"{slug_field}__startwith": base}).values_list(slug_field, flat=True)
+        manager.filter(**{f"{slug_field}__startswith": base}).values_list(slug_field, flat=True)
     )
     
+    pattern = re.compile(rf"^{re.escape(base)}-(\d+)$")
+    taken_numbers = {1} if base in existing else set()
+    for i in existing:
+        m = pattern.match(i)
+        if m:
+            try:
+                taken_numbers.add(int(m.group(1)))
+            except ValueError:
+                pass
     
+    n = (max(taken_numbers) + 1) if taken_numbers else 2
+    
+    while True:
+        suffix = f"-{n}"
+        if len(base) + len(suffix) > max_length:
+            trimmed_base = base[: max_length - len(suffix)].rstrip("-")
+        else:
+            trimmed_base = base
+        candidate = f"{trimmed_base}{suffix}"
+        if not manager.filter(**{slug_field: candidate}).exists():
+            return candidate
+        n += 1
+        
+def assign_product_slug(instance) -> None:
+    if getattr(instance, "slug", None): 
+        return
+    base = build_base_slug(instance, allow_unicode=False, max_base_len=80)
+    unique = make_unicode_slug(base, model=type(instance), slug_field="slug")
+    instance.slug = unique

@@ -90,7 +90,7 @@ class Product(models.Model):
     slug = models.SlugField(
         verbose_name='URL-идентификатор',
         max_length=255,
-        # unique=True,
+        unique=True,
         blank=True,
     )
     image = models.ImageField(
@@ -115,7 +115,7 @@ class Product(models.Model):
         return f"{self.name}"
         
     def get_absolute_url(self):
-        return reverse('product', kwargs={'product_slug': self.slug})
+        return reverse('product:product', kwargs={'slug': self.slug})
     
     def save(self, *args, **kwargs):
         sale_changed = False

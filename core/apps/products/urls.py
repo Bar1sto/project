@@ -6,6 +6,6 @@ from apps.products.views import (
 
 
 urlpatterns = [
-    path('<slug:>/', ProductRetrieveView.as_view(), name='product'),
     path('all/', ProductListView.as_view(), name='product_list'),
+    path('<slug:slug>/', ProductRetrieveView.as_view(), name='product'),
 ]
