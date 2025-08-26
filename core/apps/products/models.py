@@ -118,16 +118,16 @@ class Product(models.Model):
         return reverse('product:product', kwargs={'slug': self.slug})
     
     def save(self, *args, **kwargs):
-        sale_changed = False
-        if self.pk:
-            old_sale = Product.objects.get(pk=self.pk).sale
-            sale_changed = (old_sale != self.sale)
+        # sale_changed = False
+        # if self.pk:
+        #     old_sale = Product.objects.get(pk=self.pk).sale
+        #     sale_changed = (old_sale != self.sale)
     
         super().save(*args, **kwargs)
         
-        if sale_changed or not self.pk:
-            self.update_variants_prices()
-            self.update_related_carts()
+        # if sale_changed or not self.pk:
+        #     self.update_variants_prices()
+        #     self.update_related_carts()
         
         
     def update_variants_prices(self):
@@ -204,7 +204,7 @@ class ProductVariant(models.Model):
         return f"{self.product} ({', '.join(variant_info)})"
     
     def save(self, *args, **kwargs):
-       self.current_price = self.base_price * (100 - self.product.sale) / 100
+    #    self.current_price = self.base_price * (100 - self.product.sale) / 100
        super().save(*args, **kwargs)
        
     @property
@@ -216,8 +216,4 @@ class ProductVariant(models.Model):
     class Meta:
         verbose_name = 'Вариант товара'
         verbose_name_plural = 'Варианты товаров'
-    
-
-    
-    
     
