@@ -70,6 +70,33 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
 }
 
+REDIS_HOST = 'localhost'
+REDIS_PORT = 6379
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://django@localhost:6379/0",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient", 
+        },
+    },
+    "recently_viewed": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://localhost:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+        "TIMEOUT": None,
+    },
+}
+
+RECENTLY_VIEWED = {
+    "TTL_SECONDS": 60 * 60 * 24 * 30,
+    "MAX_LEN": 50,
+    "ANON_HEADER": "X-Anon-Id",
+}
+
 SWAGGER_SETTINGS = {
     'USE_SESSION_AUTH': False,
     'SECURITY_DEFINITIONS': {

@@ -1,9 +1,6 @@
 from django.db import models
 from django.urls import reverse
-from django.template.defaultfilters import slugify
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.db.models import F
-from apps.orders.models import Cart, CartItem
 
 
 class Brand(models.Model):
@@ -118,30 +115,7 @@ class Product(models.Model):
         return reverse('product:product', kwargs={'slug': self.slug})
     
     def save(self, *args, **kwargs):
-        # sale_changed = False
-        # if self.pk:
-        #     old_sale = Product.objects.get(pk=self.pk).sale
-        #     sale_changed = (old_sale != self.sale)
-    
         super().save(*args, **kwargs)
-        
-        # if sale_changed or not self.pk:
-        #     self.update_variants_prices()
-        #     self.update_related_carts()
-        
-        
-    def update_variants_prices(self):
-        self.variants.all().update(
-            current_price=F('base_price') * (100 - self.sale) / 100
-        )
-
-    def update_related_carts(self):
-        cart_ids = CartItem.objects.filter(
-            product=self
-        ).values_list('cart_id', flat=True).distinct()
-        
-        for cart_id in cart_ids:
-            Cart.objects.get(pk=cart_id).update_total()
     
     class Meta:
         verbose_name = 'Товар'
@@ -204,7 +178,6 @@ class ProductVariant(models.Model):
         return f"{self.product} ({', '.join(variant_info)})"
     
     def save(self, *args, **kwargs):
-    #    self.current_price = self.base_price * (100 - self.product.sale) / 100
        super().save(*args, **kwargs)
        
     @property
