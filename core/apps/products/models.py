@@ -189,4 +189,38 @@ class ProductVariant(models.Model):
     class Meta:
         verbose_name = 'Вариант товара'
         verbose_name_plural = 'Варианты товаров'
+        
+class Favorite(models.Model):
+    client = models.ForeignKey(
+        'customers.Client',
+        on_delete=models.CASCADE,
+        related_name='favorites',
+        verbose_name='Клиент',
+        db_index=True,
+    )
+    product = models.ForeignKey(
+        'products.Product',
+        on_delete=models.CASCADE,
+        related_name='farovite_by',
+        verbose_name='Товар',
+        db_index=True,
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
     
+    class Meta:
+        verbose_name = 'Избранное'
+        verbose_name_plural = 'Избранные товары'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['client', 'product'], name='uq_favorite_client_product'
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['client', 'created_at']
+            ),
+        ]
+    def __str__(self):
+        return f"{self.client_id} ♥ {self.product_id}"

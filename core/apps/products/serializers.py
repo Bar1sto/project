@@ -35,6 +35,7 @@ class CategorySerializer(serializers.ModelSerializer):
             )
 
 class ProductSerializer(serializers.ModelSerializer):
+    is_favorited = serializers.BooleanField(read_only=True)
     variants = ProductVariantSerializer(
         many=True,
         read_only=True,
@@ -61,13 +62,16 @@ class ProductSerializer(serializers.ModelSerializer):
             'is_active',
             'sale',
             'variants',
+            'is_favorited',
         )
         
 class ProductListSerializer(serializers.ModelSerializer):
+    is_favorited = serializers.BooleanField(read_only=True)
     class Meta:
         model = Product
         fields = (
             'name',
             'price',
             'image',
+            'is_favorited',
         )

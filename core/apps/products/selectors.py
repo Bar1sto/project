@@ -2,11 +2,16 @@ from django.db.models import (
     Q,
     Count,
     Prefetch,
+    Exists,
+    OuterRef,
+    Value,
+    BooleanField,
     
 )
 from apps.products.models import (
     Product,
     ProductVariant,
+    Favorite,
 )
 
 
@@ -17,15 +22,23 @@ def base_products_qs():
         Product.objects.select_related('brand', 'category').filter(is_active=True)
     )
     
+def _annotate_is_favorited(qs, user):
+    if user and getattr(user, 'is_authenticated', False) and getattr(user, 'client_id', None):
+        subq = Favorite.objects.filter(client_id=user.client_id, product_id=OuterRef("pk"))
+        return qs.annotate(is_favorited=Exists(subq))
+    return qs.annotate(is_favorited=Value(False, output_field=BooleanField()))
+
 def with_list_annotations(qs, user=None):
     active_variants = Q(**{f"{VARIANTS_RELATED_NAME}__is_active": True})
-    return qs.annotate(
+    qs = qs.annotate(
         variants_count=Count(
             VARIANTS_RELATED_NAME,
             filter=active_variants,
             distinct=True,
-        ),
+        ),   
     )
+    qs = _annotate_is_favorited(qs, user)
+    return qs
     
 def get_products_list_qs(*, user=None):
     qs = base_products_qs()
@@ -39,5 +52,6 @@ def get_product_detail_qs(*, user=None):
             VARIANTS_RELATED_NAME, queryset=active_variants_qs
         )
     ))
+    qs = _annotate_is_favorited(qs, user)
     
     return qs

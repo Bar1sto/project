@@ -70,32 +70,58 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
 }
 
-REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
+REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_PASS = os.getenv("REDIS_PASSWORD", "")
+REDIS_TLS = os.getenv("REDIS_TLS", "0") == "1"
+CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "shop")
+
+RECENTLY_VIEWED = {
+    "TTL_SECONDS": int(os.getenv("RECENTLY_VIEWED_TTL_SECONDS", str(60 * 60 * 24 * 30))),
+    "MAX_LEN": int(os.getenv("RECENTLY_VIEWED_MAX_LEN", "50")),
+    "ANON_HEADER": "X-Anon-Id",
+}
+
+_SCHEME = "rediss" if REDIS_TLS else "redis"
+
+def _redis_url(db: int) -> str:
+    if REDIS_PASS:
+        return f"{_SCHEME}://:{REDIS_PASS}@{REDIS_HOST}:{REDIS_PORT}/{db}"
+    return f"{_SCHEME}://{REDIS_HOST}:{REDIS_PORT}/{db}"
 
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://django@localhost:6379/0",
+        "LOCATION": _redis_url(0),
         "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient", 
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "IGNORE_EXCEPTIONS": True,
         },
+        "TIMEOUT": None,
+        "KEY_PREFIX": CACHE_KEY_PREFIX,
     },
     "recently_viewed": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://localhost:6379/1",
+        "LOCATION": _redis_url(1),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "IGNORE_EXCEPTIONS": True,
         },
         "TIMEOUT": None,
+        "KEY_PREFIX": CACHE_KEY_PREFIX,
+    },
+    "cart": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": _redis_url(2),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "IGNORE_EXCEPTIONS": True,
+        },
+        "TIMEOUT": None,
+        "KEY_PREFIX": CACHE_KEY_PREFIX,
     },
 }
 
-RECENTLY_VIEWED = {
-    "TTL_SECONDS": 60 * 60 * 24 * 30,
-    "MAX_LEN": 50,
-    "ANON_HEADER": "X-Anon-Id",
-}
 
 SWAGGER_SETTINGS = {
     'USE_SESSION_AUTH': False,

@@ -4,6 +4,7 @@ from apps.products.models import (
     Category,
     Product,
     ProductVariant,
+    Favorite,
 )
 
 
@@ -137,3 +138,10 @@ class ProductVariantAdmin(admin.ModelAdmin):
         return obj.display_price
         
     display_price.short_description = 'Текущая цена'
+    
+@admin.register(Favorite)
+class FavoriteAdmin(admin.ModelAdmin):
+    list_display = (
+        'client',
+        'product',
+    )
