@@ -201,7 +201,7 @@ class Favorite(models.Model):
     product = models.ForeignKey(
         'products.Product',
         on_delete=models.CASCADE,
-        related_name='farovite_by',
+        related_name='favorited_by',
         verbose_name='Товар',
         db_index=True,
     )

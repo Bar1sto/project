@@ -1,6 +1,12 @@
 from django.contrib import admin
 from django.urls import path, include
 from core.swagger import schema_view
+from apps.products.views import (
+    FavoriteListView,
+    FavoriteSetView,
+    RecentlyViewedListView,
+    
+)
 
 
 
@@ -10,6 +16,12 @@ urlpatterns = [
     path('api/clients/', include('apps.customers.urls')),
     
     path('api/products/', include('apps.products.urls')),
+    
+    path('favorites/', FavoriteListView.as_view(), name='favorites_list'),
+    
+    path('api/recently-viewed/', RecentlyViewedListView.as_view(), name='recently_viewed'),
+    
+    path('favorites/<slug:slug>/', FavoriteSetView.as_view(), name='favorites_remove'),
     
     path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     

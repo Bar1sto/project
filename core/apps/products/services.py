@@ -1,3 +1,4 @@
+import time
 from decimal import Decimal
 from django.db import IntegrityError
 from django.core.exceptions import ObjectDoesNotExist
@@ -9,8 +10,19 @@ from apps.customers.models import Client
 from django.db.models import (
     F,
     Value,
+    Case,
+    When,
+    IntegerField,
 )
-from typing import Iterable
+from typing import (
+    Iterable,
+    List,
+)
+from django_redis import get_redis_connection
+from django.conf import settings
+from apps.products.selectors import (
+    base_products_qs,
+)
 from apps.products.models import (
     Product,
     ProductVariant,
@@ -90,4 +102,60 @@ def favorites_products_qs(client: Client):
             is_active=True,
             favorited_by__client=client,
         ).select_related("brand", "category").order_by("-favorited_by__created_at")
+    )
+    
+def _rv_conn():
+    return get_redis_connection('recently_viewed')
+
+def _rv_key(*, user_id=None, annon_id=None) -> str | None:
+    if user_id:
+        return f'rv:u:{user_id}'
+    if annon_id:
+        return f'rv:a:{annon_id}'
+    return None
+
+def add_recent_view(*, product_id: int, user_id: int | None, annon_id: str | None, ts: float | None = None) -> None:
+    key = _rv_key(user_id=user_id, annon_id=annon_id)
+    if not key:
+        return
+    conn = _rv_conn()
+    score = ts or time.time()
+    conn.zadd(key, {product_id: score})
+    max_len = settings.RECENTLY_VIEWED['MAX_LEN']
+    conn.zremrangebyrank(
+        key,
+        0,
+        -(max_len + 1),
+    )
+    conn.expire(
+        key,
+        settings.RECENTLY_VIEWED['TTL_SECONDS'],
+    )
+    
+def get_recent_ids(*, user_id: int | None, anon_id: str | None, limit: int = 10) -> List[int]:
+    key = _rv_key(
+        user_id=user_id,
+        annon_id=anon_id,
+    )
+    if not key:
+        return []
+    conn = _rv_conn()
+    ids = conn.zrevrange(
+        key,
+        0,
+        max(0, limit - 1),
+    )
+    return [int(i) for i in ids]
+
+def products_preserve_order(ids: List[int]):
+    if not ids:
+        return base_products_qs().none()
+    ordering = Case(
+        *[When(pk=pk, then=pos) for pos, pk in enumerate(ids)],
+        output_field=IntegerField()
+    )
+    return base_products_qs().filter(
+        pk__in=ids
+    ).order_by(
+        ordering
     )

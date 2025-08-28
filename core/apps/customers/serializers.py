@@ -1,3 +1,4 @@
+import re
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -17,7 +18,6 @@ from apps.customers.models import (
     Client,
     Bonus,
 )
-import re
 from apps.customers.services import (
     register_client,
     update_client,
