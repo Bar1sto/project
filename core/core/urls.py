@@ -5,7 +5,6 @@ from apps.products.views import (
     FavoriteListView,
     FavoriteSetView,
     RecentlyViewedListView,
-    
 )
 
 
@@ -16,6 +15,8 @@ urlpatterns = [
     path('api/clients/', include('apps.customers.urls')),
     
     path('api/products/', include('apps.products.urls')),
+    
+    path('api/orders/', include('apps.orders.urls')),
     
     path('favorites/', FavoriteListView.as_view(), name='favorites_list'),
     
