@@ -6,6 +6,7 @@ from django.db.models import (
     OuterRef,
     Value,
     BooleanField,
+    Min,
     
 )
 from apps.products.models import (
@@ -35,7 +36,11 @@ def with_list_annotations(qs, user=None):
             VARIANTS_RELATED_NAME,
             filter=active_variants,
             distinct=True,
-        ),   
+        ),
+        min_price=Min(
+            f"{VARIANTS_RELATED_NAME}__current_price",
+            filter=active_variants,
+        )
     )
     qs = _annotate_is_favorited(qs, user)
     return qs

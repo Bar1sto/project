@@ -37,6 +37,13 @@ class ProductFilter(django_filters.FilterSet):
             return queryset.filter(variants_count__lte=0)
         return queryset
     
+    def filter_price_min(self, queryset, name, value):
+        return queryset.filter(min_price__gte=value)
+    
+    def filter_price_max(self, queryset, name, value):
+        return queryset.filter(min_price__lte=value)
+    
     class Meta:
         model = Product
         fields = []
+    

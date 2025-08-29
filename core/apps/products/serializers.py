@@ -68,6 +68,11 @@ class ProductSerializer(serializers.ModelSerializer):
         
 class ProductListSerializer(serializers.ModelSerializer):
     is_favorited = serializers.BooleanField(read_only=True)
+    min_price = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+    )
     class Meta:
         model = Product
         fields = (
@@ -76,4 +81,5 @@ class ProductListSerializer(serializers.ModelSerializer):
             'price',
             'image',
             'is_favorited',
+            'min_price',
         )

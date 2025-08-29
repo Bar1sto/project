@@ -121,21 +121,17 @@ def add_recent_view(*, product_id: int, user_id: int | None, annon_id: str | Non
     conn = _rv_conn()
     score = ts or time.time()
     conn.zadd(key, {product_id: score})
-    max_len = settings.RECENTLY_VIEWED['MAX_LEN']
-    conn.zremrangebyrank(
-        key,
-        0,
-        -(max_len + 1),
-    )
-    conn.expire(
-        key,
-        settings.RECENTLY_VIEWED['TTL_SECONDS'],
-    )
+    max_len = settings.RECENTLY_VIEWED["MAX_LEN"]
+    size = conn.zcard(key)
+    if size > max_len:
+        conn.zremrangebyrank(key, 0, size - max_len - 1)
+
+    conn.expire(key, settings.RECENTLY_VIEWED["TTL_SECONDS"])
     
-def get_recent_ids(*, user_id: int | None, anon_id: str | None, limit: int = 10) -> List[int]:
+def get_recent_ids(*, user_id: int | None, annon_id: str | None, limit: int = 10) -> List[int]:
     key = _rv_key(
         user_id=user_id,
-        annon_id=anon_id,
+        annon_id=annon_id,
     )
     if not key:
         return []

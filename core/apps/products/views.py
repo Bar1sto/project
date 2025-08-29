@@ -1,7 +1,12 @@
 from rest_framework.views import APIView
 from django.conf import settings
 from rest_framework.response import Response
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.authentication import (
+    JWTAuthentication,
+)
+from rest_framework.authentication import (
+    SessionAuthentication,
+)
 from rest_framework import status
 from django.conf import settings
 from rest_framework.permissions import (
@@ -43,6 +48,7 @@ class ProductListView(ListAPIView):
     
     
 class ProductRetrieveView(RetrieveAPIView):
+    authentication_classes = [JWTAuthentication, SessionAuthentication]
     permission_classes = [AllowAny]
     serializer_class = ProductSerializer
     lookup_field = 'slug'
@@ -52,9 +58,9 @@ class ProductRetrieveView(RetrieveAPIView):
     
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        user_id = request.user_id if request.user.is_authenticated else None
-        anon_id = request.headers.get(settings.RECENTLY_VIEWED["ANON_HEADER"])
-        add_recent_view(product_id=instance.id, user_id=user_id, anon_id=anon_id)
+        user_id = request.user.id if request.user.is_authenticated else None
+        annon_id = None if user_id else request.headers.get(settings.RECENTLY_VIEWED["ANON_HEADER"])
+        add_recent_view(product_id=instance.id, user_id=user_id, annon_id=annon_id)
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
     
@@ -100,20 +106,21 @@ class FavoriteSetView(APIView):
 class RecentlyViewedListView(ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = ProductListSerializer
+    authentication_classes = [JWTAuthentication]
     
     def get_queryset(self):
         request = self.request
         try:
-            limit = int(request.query_params.gt('limit', 10))
+            limit = int(request.query_params.get('limit', 10))
         except ValueError:
             limit = 10
         
-        user_id = request.user.id if request.user.is_authenticated else None
-        anon_id = None if user_id else request.headers.get(settings.RECENTLY_VIEWED['ANON_HEADER'])
-        
-        ids = get_recent_ids(
-            user_id=user_id,
-            anon_id=anon_id,
-            limit=limit,
-        )
+        if request.user.is_authenticated:
+            user_id = request.user.id
+            annon_id = None
+        else:
+            user_id = None
+            annon_id = request.headers.get(settings.RECENTLY_VIEWED["ANON_HEADER"])
+
+        ids = get_recent_ids(user_id=user_id, annon_id=annon_id, limit=limit)
         return products_preserve_order(ids)
