@@ -24,3 +24,10 @@ class CartSerializer(serializers.ModelSerializer):
             'cart_total_sum',
             'cart_items',
         )
+        
+class CarItemSetSerializer(serializers.Serializer):
+    variant_id = serializers.IntegerField()
+    qty = serializers.IntegerField()
+    
+class MergeAnonSerializer(serializers.Serializer):
+    pass

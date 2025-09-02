@@ -14,12 +14,14 @@ class Cart(models.Model):
     )
     create_at = models.DateField(
         verbose_name='Дата создания корзины',
-        auto_created=True
+        auto_created=True,
+        auto_now_add=True,
         
     )
     update_at = models.DateField(
         verbose_name='Дата обновления корзины',
-        auto_created=True
+        auto_created=True,
+        auto_now=True,
         
     )
     cart_total_sum = models.DecimalField(
@@ -58,49 +60,6 @@ class Cart(models.Model):
     
     def __str__(self):
         return f'Заказ №{self.pk}' if self.is_ordered else f'Корзина №{self.pk}'
-    
-    @property
-    def total_sum(self):
-       return self.calculate_total()
-   
-    def calculate_total(self):
-        result = self.cart_items.aggregate(
-            total = Sum(F('product_variant__current_price') * F('quantity'))
-        )
-        return Decimal(result['total']) if result['total'] is not None else Decimal('0')
-    
-    def update_total(self):
-        self.cart_total_sum = self.total_sum
-        self.save(update_fields=['cart_total_sum'])
-
-    def save(self, *args, **kwargs):
-        old_status = Cart.objects.get(pk=self.pk).status if self.pk else None
-        
-        super().save(*args, **kwargs)
-        
-        if self.status == 'not_completed' and old_status != 'not_completed':
-            self.is_ordered = True
-            self.ordered_at = timezone.now()
-            
-            Cart.objects.filter(pk=self.pk).update(
-                is_ordered=True,
-                ordered_at=timezone.now()
-            )
-            
-            if hasattr(self, '_creating_bonus'):
-                return
-                
-            self._creating_bonus = True
-            try:
-                bonus_amount = self.total_sum * Decimal('0.05')
-                Bonus.objects.create(
-                    client=self.client,
-                    amount=bonus_amount,
-                    order=self,
-                    expires_at=timezone.now() + timezone.timedelta(days=365))
-            finally:
-                del self._creating_bonus
-        
         
     class Meta:
         verbose_name = 'Корзина'
@@ -132,14 +91,6 @@ class CartItem(models.Model):
     
     def __str__(self):
         return f'Количество: {self.quantity}'
-    
-    @property
-    def total_price(self):
-        return self.product_variant.current_price * self.quantity
-    
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        self.cart.update_total()
     
     class Meta:
         verbose_name = 'Товар в корзине'

@@ -2,7 +2,6 @@ from apps.orders.models import (
     Cart,
     CartItem,
 )
-from django.db.models import Prefetch
 
 
 def get_or_create_draft_cart(client) -> Cart:
