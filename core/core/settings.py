@@ -1,6 +1,5 @@
 from datetime import timedelta
 from pathlib import Path
-from drf_yasg import openapi
 import os, sys
 from dotenv import load_dotenv
 
@@ -11,7 +10,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR.parent
 sys.path.insert(0, os.path.join(BASE_DIR, 'apps'))
-
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 
 SECRET_KEY = os.environ["DJANGO_KEY"]

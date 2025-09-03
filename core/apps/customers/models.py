@@ -1,9 +1,9 @@
+import re
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import date
-import re
 from decimal import Decimal
 
         
@@ -40,9 +40,10 @@ class Client(models.Model):
         verbose_name='Дата рождения'
     )
     image = models.ImageField(
-        upload_to='clients/',
+        upload_to='customer/',
         verbose_name='Изображение клиента',
-        blank=True
+        blank=True,
+        null=True,
     )
     
     def __str__(self):

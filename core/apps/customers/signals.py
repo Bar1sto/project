@@ -2,11 +2,10 @@ from django.db.models.signals import (
     post_save,
     post_delete
 )
-from django.dispatch import receiver, Signal
+from django.dispatch import receiver
 from django.db import transaction
 from apps.customers.models import (
     Promocode,
-    PromocodeClient,
 )
 from apps.customers.services import (
     assign_promocode_to_all_clients,

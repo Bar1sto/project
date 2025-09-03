@@ -91,9 +91,10 @@ class Product(models.Model):
         blank=True,
     )
     image = models.ImageField(
-        upload_to='products_image/',
+        upload_to='productiproducts_image/',
         verbose_name='Изображение',
-        blank=True
+        blank=True,
+        null=True,
     )
     sale = models.PositiveIntegerField(
         verbose_name='Скидка (%)',
