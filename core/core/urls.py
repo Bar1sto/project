@@ -10,7 +10,6 @@ from apps.products.views import (
 )
 
 
-
 urlpatterns = [
     path('admin/', admin.site.urls),
     
@@ -24,6 +23,8 @@ urlpatterns = [
     
     path('api/recently-viewed/', RecentlyViewedListView.as_view(), name='recently_viewed'),
     
+    path('api/payments/', include('apps.payments.urls', namespace='payments')),
+    
     path('favorites/<slug:slug>/', FavoriteSetView.as_view(), name='favorites_remove'),
     
     path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
@@ -32,6 +33,7 @@ urlpatterns = [
     path('', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    
 ]
 
 if settings.DEBUG:

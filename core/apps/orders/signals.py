@@ -5,6 +5,7 @@ from django.db import transaction
 from .models import Cart, CartItem
 from .services import cart_recalculate, order_mark_paid_by_id
 
+
 @receiver(pre_save, sender=Cart)
 def cart_pre_save_capture_old_status(sender, instance: Cart, **kwargs):
     if instance.pk:

@@ -24,6 +24,7 @@ LOCAL_APPS = [
     'apps.products.apps.ProductsConfig',
     'apps.customers.apps.CustomersConfig',
     'apps.orders.apps.OrdersConfig',
+    'apps.payments.apps.PaymentsConfig',
 ]
 
 DRF_APPS = [
@@ -207,3 +208,26 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 # AUTH_USER_MODEL = 'apps.customers.Client'
+
+
+# T-BANK
+T_BANK_MODE = os.getenv("T_BANK_MODE", "demo").lower()
+
+T_BANK = {
+    "BASE_URL": "https://rest-api-test.tinkoff.ru/v2" if T_BANK_MODE == "demo" else "https://securepay.tinkoff.ru/v2",
+    "TERMINAL_KEY": os.getenv("TINKOFF_TERMINAL_KEY_DEMO") if T_BANK_MODE == "demo" else os.getenv("TINKOFF_TERMINAL_KEY"),
+    "PASSWORD": os.getenv("TINKOFF_PASSWORD_DEMO") if T_BANK_MODE == "demo" else os.getenv("TINKOFF_PASSWORD"),
+    "SUCCESS_URL": os.getenv("PAY_SUCCESS_URL", "http://127.0.0.1:5173/pay/success"),
+    "FAIL_URL":    os.getenv("PAY_FAIL_URL",    "http://127.0.0.1:5173/pay/fail"),
+}
+if not T_BANK["TERMINAL_KEY"] or not T_BANK["PASSWORD"]:
+    raise RuntimeError(
+        "T_BANK credentials are not set. Check .env"
+    )
+
+# TINKOFF_TERMINAL_KEY_DEMO = os.environ["TINKOFF_TERMINAL_KEY_DEMO"]
+# TINKOFF_PASSWORD_DEMO = os.environ["TINKOFF_PASSWORD_DEMO"]
+
+# банк редеректит пользователя
+PAYMENTS_SUCCESS_URL = os.getenv("PAY_SUCCESS_URL", "http://127.0.0.1:5173/pay/success")
+PAYMENTS_FAIL_URL    = os.getenv("PAY_FAIL_URL", "http://127.0.0.1:5173/pay/fail")
