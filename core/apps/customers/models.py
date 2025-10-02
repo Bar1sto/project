@@ -4,7 +4,8 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
+from django.conf import settings
 
         
 class Client(models.Model):
@@ -133,32 +134,64 @@ class Bonus(models.Model):
         return timezone.now() > self.expires_at
     
     @classmethod
+    @transaction.atomic
     def create_from_order(cls, cart):
+        """
+        Идемпотентное начисление бонуса за оплаченный заказ.
+        Возвращает созданный объект Bonus или существующий, либо None если начислять нечего.
+        """
+        # 1) проверяем, что заказ оплачен и находится в нужном статусе
         if not cart.is_ordered or cart.status != 'not_completed':
             return None
-        if not cart.client or cart.total_sum <= 0:
+
+        total = Decimal(cart.cart_total_sum or 0)
+        if not cart.client_id or total <= 0:
             return None
+
+        existing = cls.objects.filter(order=cart).first()
+        if existing:
+            return existing
+
+        percent = Decimal(getattr(settings, "BONUS_PERCENT", 5)) / Decimal('100')
+        bonus_amount = (total * percent).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        if bonus_amount <= 0:
+            return None
+
+        return cls.objects.create(
+            client=cart.client,
+            amount=bonus_amount,
+            order=cart,
+            expires_at=timezone.now() + timezone.timedelta(days=int(getattr(settings, "BONUS_EXPIRES_DAYS", 365))),
+            is_active=True,
+        )
     
-        if cls.objects.filter(
-            order=cart
-        ).exists():
-            return None
+    # @classmethod
+    # def create_from_order(cls, cart):
+    #     if not cart.is_ordered or cart.status != 'not_completed':
+    #         return None
+    #     if not cart.client or cart.total_sum <= 0:
+    #         return None
+    
+    #     if cls.objects.filter(
+    #         order=cart
+    #     ).exists():
+    #         return None
         
-        bonus_amount = cart.total_sum * Decimal('0.05')
+    #     bonus_amount = cart.total_sum * Decimal('0.05')
         
-        try:
-            with transaction.atomic():
-                return cls.objects.create(
-                    client=cart.client,
-                    amount=bonus_amount,
-                    order=cart,
-                    expires_at=timezone.now() + timezone.timedelta(days=365)
-                )
+    #     try:
+    #         with transaction.atomic():
+    #             return cls.objects.create(
+    #                 client=cart.client,
+    #                 amount=bonus_amount,
+    #                 order=cart,
+    #                 expires_at=timezone.now() + timezone.timedelta(days=365)
+    #             )
         
-        except Exception as e:
-            raise ValueError(f'Ошибка создания бонусов: {str(e)}')
+    #     except Exception as e:
+    #         raise ValueError(f'Ошибка создания бонусов: {str(e)}')
         
-        return None
+    #     return None
     
     class Meta:
         verbose_name = 'Бонусы'
@@ -166,6 +199,12 @@ class Bonus(models.Model):
         ordering = ['-expires_at']
         indexes = [
             models.Index(fields=['expires_at', 'is_active']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['order'],
+                name='uniq_bonus_per_order'
+            )
         ]
         
 

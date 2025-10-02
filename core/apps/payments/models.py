@@ -5,8 +5,12 @@ class Payment(models.Model):
     cart_id = models.PositiveIntegerField(
         db_index=True,
     )
-    amount = models.PositiveIntegerField(
+    # amount = models.PositiveIntegerField(
         
+    # )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
     )
     order_id = models.CharField(
         max_length=64,
@@ -42,6 +46,7 @@ class Payment(models.Model):
     )
     
     class Meta:
+        verbose_name = 'История платежей'
         indexes = [
             models.Index(
                 fields=[

@@ -3,193 +3,198 @@ import time
 import uuid
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, Any, Optional
-
 from django.utils import timezone
+from django.conf import settings
 from django.db import transaction
-
 from apps.payments.clients import TBankClient
 from apps.payments.models import Payment
 from apps.orders.models import Cart, CartItem
 from apps.orders.services import order_mark_paid_by_id
 
 
-# --- helpers ---------------------------------------------------------------
+# --- helpers ---
 
 def _to_kopecks(amount: Decimal) -> int:
-    """Decimal -> int (копейки), банковское округление."""
-    return int((Decimal(amount) * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-
+    """Decimal -> int копейки (округляем банковским способом)."""
+    return int((amount * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 def _cart_items_qs(cart: Cart):
-    """Берём позиции корзины без привязки к related_name."""
     return (
-        CartItem.objects
-        .filter(cart=cart)
+        CartItem.objects.filter(cart=cart)
         .select_related("product", "product_variant")
     )
 
-
 def _get_cart_total_decimal(cart: Cart) -> Decimal:
     """
-    Универсально получаем сумму корзины.
-    1) Пытаемся взять известные поля, если вдруг есть (total_sum/total/...).
-    2) Если нет — считаем вручную: (variant.current_price или product.price) * quantity.
+    Универсально достаём сумму корзины:
+    - пробуем разные поля;
+    - считаем по позициям в корзине при необходимости.
     """
     candidates = ("total_sum", "total", "total_amount", "grand_total", "cart_total_sum")
     for name in candidates:
-        if hasattr(cart, name):
-            val = getattr(cart, name)
-            if val is not None:
-                try:
-                    return Decimal(val)
-                except Exception:
-                    pass
+        val = getattr(cart, name, None)
+        if val is not None:
+            try:
+                return Decimal(val)
+            except Exception:
+                pass
 
+    # пробуем вызвать адаптерный метод если есть
+    if hasattr(cart, "update_total"):
+        try:
+            cart.update_total()
+            for name in candidates:
+                val = getattr(cart, name, None)
+                if val is not None:
+                    return Decimal(val)
+        except Exception:
+            pass
+
+    # фоллбэк — считаем вручную
     total = Decimal("0")
     for ci in _cart_items_qs(cart):
-        # приоритет — цена варианта
+        price = None
         if getattr(ci, "product_variant", None) and getattr(ci.product_variant, "current_price", None) is not None:
-            price = Decimal(ci.product_variant.current_price)
+            price = ci.product_variant.current_price
         elif getattr(ci, "product", None) and getattr(ci.product, "price", None) is not None:
-            price = Decimal(ci.product.price)
+            price = ci.product.price
         else:
             price = Decimal("0")
-        qty = Decimal(ci.quantity or 0)
-        total += (price * qty)
-
+        total += Decimal(price) * Decimal(ci.quantity or 0)
     return total.quantize(Decimal("0.01"))
 
+def _new_order_id(cart: Cart) -> str:
+    return f"cart-{cart.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
 
-# --- public API ------------------------------------------------------------
+# --- T-Bank operations ---
 
 @transaction.atomic
 def create_or_get_payment_for_cart(cart: Cart) -> Payment:
     """
-    Идемпотентная инициализация платежа:
-      - если у корзины уже есть «живой» платёж (NEW/FORM_SHOWED/AUTHORIZING) — вернём его;
-      - иначе создадим новый, вызовем /v2/Init и сохраним PaymentURL/PaymentId.
+    Идемпотентно: получаем существующий "живой" платеж или создаём новый и вызываем Init.
     """
     cart.refresh_from_db()
-
-    if not _cart_items_qs(cart).exists():
+    # проверяем что у корзины есть позиции и сумма > 0 (вставь тут свою логику)
+    if not CartItem.objects.filter(cart=cart).exists():
         raise ValueError("Корзина пуста")
-
     total = _get_cart_total_decimal(cart)
     if total <= 0:
         raise ValueError("Сумма платежа должна быть > 0")
 
-    alive = ["NEW", "FORM_SHOWED", "AUTHORIZING"]
-    existing = (
+    alive_statuses = ["NEW", "FORM_SHOWED", "AUTHORIZING"]
+    payment = (
         Payment.objects.select_for_update()
-        .filter(cart_id=cart.id, status__in=alive)
+        .filter(cart_id=cart.id, status__in=alive_statuses)
         .order_by("-id")
         .first()
     )
-    if existing:
-        return existing
+    if payment:
+        return payment
 
-    amount = _to_kopecks(total)  # в копейках
+    amount = _to_kopecks(total)
     order_id = f"cart-{cart.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
-
-    pay = Payment.objects.create(
-        cart_id=cart.id,
-        amount=amount,
-        order_id=order_id,
-        status="NEW",
-    )
+    payment = Payment.objects.create(cart_id=cart.id, amount=amount, order_id=order_id, status="NEW")
 
     client = TBankClient()
-    init_resp = client.init(
-        amount=amount,
-        order_id=order_id,
-        description=f"Оплата корзины #{cart.id}",
-    )
-    pay.raw_init_resp = init_resp
+    init_resp = client.init(amount=amount, order_id=order_id, description=f"Оплата корзины #{cart.id}")
+    payment.raw_init_resp = init_resp
 
     if init_resp.get("Success"):
-        pay.payment_id = str(init_resp.get("PaymentId") or "") or None
-        pay.payment_url = init_resp.get("PaymentURL") or init_resp.get("PaymentUrl")
-        pay.save(update_fields=["raw_init_resp", "payment_id", "payment_url"])
-        return pay
+        payment.payment_id = str(init_resp.get("PaymentId") or "") or None
+        payment.payment_url = init_resp.get("PaymentURL") or init_resp.get("PaymentUrl")
+        payment.save(update_fields=["raw_init_resp", "payment_id", "payment_url"])
+        return payment
 
-    # ошибка с бэка T-Банка — зафиксируем и отдадим наружу
-    pay.status = "REJECTED"
-    pay.save(update_fields=["raw_init_resp", "status"])
+    # ошибка
+    payment.status = "REJECTED"
+    payment.save(update_fields=["raw_init_resp", "status"])
     raise RuntimeError(f"T-Bank Init error: {init_resp}")
 
-
-def get_state_by_order(order_id: str) -> Dict[str, Any]:
+def get_state_by_order(order_id: str, payment_id: Optional[str] = None) -> dict:
     """
-    Опрос состояния платежа по нашему order_id (удобно для фронта как fallback).
-    """
-    client = TBankClient()
-    return client.get_state(order_id=order_id)
-
-
-def verify_tbank_token(payload: Dict[str, Any]) -> bool:
-    """
-    Валидация подписи коллбэка. Делаем токен теми же правилами, что и T-Банк.
+    Попытка получить статус у T-Bank по OrderId.
+    Если T-Bank отвечает ошибкой 'PaymentId is required' — пробуем найти
+    локально Payment по order_id и сделать GetState по PaymentId.
     """
     client = TBankClient()
-    expected = client._make_token(payload)
-    return str(payload.get("Token", "")).lower() == expected.lower()
+    # Попытка прямого запроса по OrderId
+    resp = client.get_state(order_id=order_id)
+    # Если T-Bank ответил с ошибкой, что нужен PaymentId (ErrorCode 201) — попробуем локальную запись
+    if resp.get("Success") is True or resp.get("ErrorCode") != "201":
+        return resp
+
+    # fallback: найти наш Payment и запросить по PaymentId
+    from apps.payments.models import Payment
+    pay = Payment.objects.filter(order_id=order_id).order_by("-id").first()
+    if pay and pay.payment_id:
+        return client.get_state(payment_id=str(pay.payment_id))
+    return resp
 
 
-@transaction.atomic
-def handle_callback(data: Dict[str, Any]) -> None:
-    """
-    Обработка «тихого» Callback (JSON): сохраняем коллбек, обновляем статус платежа,
-    при CONFIRMED — отмечаем заказ «оплачен» (твоя логика).
-    """
-    if not verify_tbank_token(data):
-        return
+# --- webhook / callback handling ---
 
-    payment_id = str(data.get("PaymentId") or "")
-    order_id = str(data.get("OrderId") or "")
-    status = str(data.get("Status") or "")
-
-    pay: Optional[Payment] = None
-    if payment_id:
-        pay = Payment.objects.select_for_update().filter(payment_id=payment_id).first()
-    if not pay and order_id:
-        pay = Payment.objects.select_for_update().filter(order_id=order_id).first()
-    if not pay:
-        return
-
-    pay.raw_last_callback = data
-    pay.status = status or pay.status
-    pay.save(update_fields=["raw_last_callback", "status"])
-
-    if status.upper() == "CONFIRMED":
-        # это вызовет твою бизнес-логику «перевести корзину в not_completed и т.п.»
-        order_mark_paid_by_id(pay.cart_id)
-
+def _verify_token_with_client(payload: Dict[str, Any]) -> bool:
+    client = TBankClient()
+    expected = client._make_token(dict(payload))
+    return expected == payload.get("Token")
 
 @transaction.atomic
 def apply_webhook(data: Dict[str, Any]) -> str:
     """
-    Вариант хендлера, который возвращает строку — удобно для NotificationURL.
+    Обработка webhook (string/plain ответ). Проверяем подпись и обновляем Payment.
+    Возвращает 'OK' или 'INVALID TOKEN'.
     """
-    if not verify_tbank_token(data):
+    if not _verify_token_with_client(data):
         return "INVALID TOKEN"
 
     payment_id = str(data.get("PaymentId") or "")
     order_id = str(data.get("OrderId") or "")
-    status = str(data.get("Status") or "")
 
     pay: Optional[Payment] = None
     if payment_id:
-        pay = Payment.objects.select_for_update().filter(payment_id=payment_id).first()
+        pay = Payment.objects.filter(payment_id=payment_id).order_by("-id").first()
     if not pay and order_id:
-        pay = Payment.objects.select_for_update().filter(order_id=order_id).first()
+        pay = Payment.objects.filter(order_id=order_id).order_by("-id").first()
+
     if not pay:
         return "OK"
 
     pay.raw_last_callback = data
-    pay.status = status or pay.status
+    pay.status = data.get("Status") or pay.status
     pay.save(update_fields=["raw_last_callback", "status"])
 
-    if status.upper() == "CONFIRMED":
+    success_flag = data.get("Success") in (True, "true", "True", "1", 1)
+    status_upper = str(data.get("Status") or "").upper()
+    if success_flag and status_upper == "CONFIRMED":
         order_mark_paid_by_id(pay.cart_id)
 
     return "OK"
+
+@transaction.atomic
+def handle_callback(data: Dict[str, Any]) -> None:
+    """
+    Альтернативный обработчик callback (логика та же, но без возврата строки).
+    Подписан под internal-view.
+    """
+    # verify token
+    if not _verify_token_with_client(data):
+        return
+
+    payment_id = str(data.get("PaymentId") or "")
+    order_id = str(data.get("OrderId") or "")
+    status = data.get("Status") or ""
+
+    payment = None
+    if payment_id:
+        payment = Payment.objects.select_for_update().filter(payment_id=payment_id).first()
+    if not payment and order_id:
+        payment = Payment.objects.select_for_update().filter(order_id=order_id).first()
+    if not payment:
+        return
+
+    payment.raw_last_callback = data
+    payment.status = status or payment.status
+    payment.save(update_fields=["raw_last_callback", "status"])
+
+    if str(status).upper() == "CONFIRMED":
+        order_mark_paid_by_id(payment.cart_id)

@@ -1,16 +1,17 @@
-import time
 from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
-from django.conf import settings
 from django_redis import get_redis_connection
 from django.db.models import Case, When, IntegerField
-
 from apps.customers.models import Bonus
+from typing import Dict, Any, Optional
 from apps.products.models import ProductVariant
+from apps.payments.models import Payment
+from apps.payments.clients import TBankClient
 from apps.products.selectors import base_products_qs
 from .models import Cart, CartItem
 from .selectors import get_or_create_draft_cart, cart_items_qs
+
 
 DEC_100 = Decimal("100")
 
@@ -188,22 +189,27 @@ def order_mark_paid_by_id(cart_id: int) -> None:
 
     cart = Cart.objects.select_for_update().get(pk=cart_id)
 
-    if cart.status != "not_completed":
-        return
+    # Если уже оформлена — ничего не делаем
     if cart.is_ordered:
         return
 
-    now = timezone.now()
-    cart.is_ordered = True
-    cart.ordered_at = now
-    cart.save(update_fields=["is_ordered", "ordered_at"])
-
-    try:
-        Bonus.create_from_order(cart)
-    except Exception:
-        pass
-
+    # Пересчёт на всякий случай
     cart_recalculate(cart)
+
+    # Переводим в "не выполнен" (так ты и хотел после успешной оплаты)
+    cart.status = "not_completed"
+    cart.is_ordered = True
+    cart.ordered_at = timezone.now().date()  # ВАЖНО: у тебя DateField
+    cart.save(update_fields=["status", "is_ordered", "ordered_at", "cart_total_sum"])
+
+    # Бонусы (если есть подходящая логика в модели Bonus)
+    try:
+        if hasattr(Bonus, "create_from_order"):
+            Bonus.create_from_order(cart)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Bonus.create_from_order(cart=%s) failed", cart.pk)
+       
 
 # «Повторить заказ»
 
@@ -238,4 +244,44 @@ def repeat_order_into_draft(client, *, from_cart_id: int, merge_strategy: str = 
             moved += 1
 
     return moved
+
+@transaction.atomic
+def sync_by_payment_or_order_id(ident: str) -> Dict[str, Any]:
+    """
+    Опросить T-Банк по PaymentId (если ident — число) или по OrderId (иначе).
+    Обновить наш Payment и, если CONFIRMED, отметить заказ оплаченным.
+    Вернуть «сырое» тело ответа банка.
+    """
+    client = TBankClient()
+    if ident.isdigit():
+        resp = client.get_state(payment_id=ident)
+    else:
+        resp = client.get_state(order_id=ident)
+
+    # обновим нашу запись Payment (если найдём)
+    pay: Optional[Payment] = None
+    pid = str(resp.get("PaymentId") or "")
+    oid = str(resp.get("OrderId") or "")
+
+    if pid:
+        pay = Payment.objects.select_for_update().filter(payment_id=pid).order_by("-id").first()
+    if not pay and oid:
+        pay = Payment.objects.select_for_update().filter(order_id=oid).order_by("-id").first()
+
+    if pay:
+        # сохраним «последний статус» и сам ответ
+        pay.raw_last_callback = {
+            **resp,
+            "_synced": True,
+            "_lookup": {"PaymentId": pid, "OrderId": oid},
+        }
+        if resp.get("Status"):
+            pay.status = resp["Status"]
+        pay.save(update_fields=["raw_last_callback", "status"])
+
+        # если банк сказал CONFIRMED — оформляем заказ
+        if resp.get("Success") is True and resp.get("Status") == "CONFIRMED":
+            order_mark_paid_by_id(pay.cart_id)
+
+    return resp
     
