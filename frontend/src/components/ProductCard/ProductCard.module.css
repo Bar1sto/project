@@ -1,0 +1,125 @@
+.card {
+  background: #E5E5E5;
+  border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+}
+
+.imageContainer {
+  position: relative;
+  margin: 8px 18px 5px 18px;
+  border-radius: 4px;
+  border-width: 10;
+  border-color: #1C1A61;
+  padding: 10px;
+  flex-grow: 1;
+  display: flex;
+  border: 1px solid #1C1A61;
+  background-color: #fff;
+  align-items: center;
+  justify-content: center;
+}
+
+.productImage {
+  max-width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+}
+
+.hitBadge {
+  width: 25px;
+  height: 16px;
+  background: #EC1822;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 15px;
+  font-size: 12px;
+}
+
+.productInfo {
+  padding: 8px 16px;
+  text-align: left;
+}
+
+.productBrand {
+  font-size: 13px;
+  color: #1C1A61;
+  margin: 0 0 4px 0;
+  transition: color 0.3s;
+}
+
+.productName {
+  font-size: 20px;
+  font-weight: 500;
+  color: #1C1A61;
+  margin: 0 0 8px 0;
+  transition: color 0.3s;
+}
+
+.productPrice {
+  font-size: 30px;
+  font-weight: bold;
+  color: #1C1A61;
+  margin: 0 0 12px 0;
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 0 8px 16px;
+}
+
+.cartButton {
+  background: #1C1A61;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.3s;
+  flex-grow: 1;
+}
+
+.cartButton:hover {
+  background: #EC1822;
+}
+
+.favoriteButton {
+  background: #E5E5E5;
+  border: 1px solid #D0D0D0; 
+  border-radius: 4px;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.favoriteButton:hover {
+  background: #D8D8D8;
+  border-color: #C0C0C0;
+}
+
+.favoriteButton img {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s;
+}
+
+.favoriteButton:hover img {
+  transform: scale(1.1);
+}
+
+/* Состояния при наведении */
+.card:hover .productBrand,
+.card:hover .productName {
+  color: #EC1822;
+}

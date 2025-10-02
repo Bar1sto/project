@@ -1,0 +1,161 @@
+/* Основные стили страницы */
+.authPage {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: 'Actay', sans-serif; /* Замените на ваш шрифт */
+    min-height: calc(100vh - 80px); /* Учитываем высоту шапки */
+  }
+  
+  /* Хлебные крошки (левый угол) */
+  .breadcrumbs {
+    margin: 0 0 30px 0;
+    padding: 0;
+    text-align: left;
+    width: 100%;
+    font-size: 15px;
+  }
+  
+  .breadcrumbLink {
+    color: #1C1A61;
+    text-decoration: none;
+    transition: opacity 0.3s;
+  }
+  
+  .breadcrumbLink:hover {
+    opacity: 0.8;
+    color: #EC1822;
+  }
+  
+  .breadcrumbSeparator {
+    color: #1C1A61;
+    margin: 0 5px;
+  }
+  
+  .breadcrumbCurrent {
+    color: #1C1A61;
+    font-weight: 500;
+  }
+  
+  /* Контейнер формы */
+  .authContainer {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+  
+  /* Заголовок */
+  .authTitle {
+    color: #1C1A61;
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 30px;
+    text-align: center;
+  }
+  
+  /* Форма */
+  .authForm {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  /* Группа полей ввода */
+  .inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  /* Поля ввода */
+  .authInput {
+    padding: 12px 15px;
+    border: 1px solid #D9D9D9;
+    border-radius: 8px;
+    font-size: 16px;
+    color: #1C1A61;
+    background: transparent;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.3s;
+  }
+  
+  .authInput::placeholder {
+    color: #A0A0A0;
+    opacity: 1;
+  }
+  
+  .authInput:focus {
+    border-color: #1C1A61;
+  }
+  
+  /* Кнопка */
+  .submitButton {
+    background-color: #1C1A61;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    margin-top: 10px;
+    width: 100%;
+  }
+  
+  .submitButton:hover {
+    background-color: #EC1822;
+  }
+  
+  /* Ссылка на авторизацию */
+  .authSwitch {
+    text-align: center;
+    margin-top: 20px;
+    color: #1C1A61;
+    font-size: 14px;
+  }
+  
+  .authSwitchText {
+    background: none;
+    border: none;
+    color: #1C1A61;
+    font: inherit; /* Наследует шрифт родителя */
+    padding: 0;
+    margin-left: 0.3rem;
+    cursor: pointer;
+    text-decoration: underline;
+    transition: color 0.2s;
+  }
+  
+  .authSwitchText:hover {
+    color: #EC1822;
+  }
+
+  
+  /* Адаптивность */
+  @media (max-width: 480px) {
+    .authPage {
+      padding: 15px;
+    }
+    
+    .authContainer {
+      padding: 0;
+    }
+    
+    .authTitle {
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .authInput {
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    
+    .submitButton {
+      padding: 12px;
+      font-size: 15px;
+    }
+  }

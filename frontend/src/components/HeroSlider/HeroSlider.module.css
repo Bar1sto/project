@@ -1,0 +1,18 @@
+.sliderContainer {
+  width: calc(100% - 110px); /* Отступы по 20px с каждой стороны */
+  height: 400px; /* Настройте под макет */
+  margin: 40px auto; /* Центрирование и отступы сверху/снизу */
+}
+
+.swiper {
+  height: 100%;
+  border-radius: 50px; /* Скругление как в Figma */
+  overflow: hidden; /* Обязательно для скругления */
+  border: 3px solid #1C1A61;
+  box-sizing: border-box;
+}
+
+.slide {
+  height: 100%;
+  width: 100%;
+}

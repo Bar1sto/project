@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Базовая типографика */
+:root { color-scheme: light; }
+html, body, #root { height: 100%; }
+body {
+  @apply antialiased bg-white text-neutral-900;
+  font-family: 'Actay', ui-sans-serif, system-ui;
+}
+
+/* Твои локальные шрифты (если нужны) */
+@font-face {
+  font-family: 'Actay';
+  src: url('./assets/fonts/Actay-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Actay';
+  src: url('./assets/fonts/Actay-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* @tailwind base;
+@tailwind components;
+@tailwind utilities;
+body {
+  margin: 0;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Actay', sans-serif;
+  font-weight: 400; /* По умолчанию Regular */
+  /* -webkit-font-smoothing: antialiased;
+} */
+/* 
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+@font-face {
+  font-family: 'Actay';
+  src: url('./assets/fonts/Actay-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Actay';
+  src: url('./assets/fonts/Actay-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* Автоматическое применение Bold для заголовков */
+/* h1, h2, h3, h4, h5, h6,
+.text-bold,
+strong, b {
+  font-weight: 700; /* Принудительно Bold */
+/* } */
+
+/* Наследование шрифта для всех элементов */
+/* button, input, textarea, select {
+  font-family: inherit;
+} */

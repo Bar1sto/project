@@ -4,7 +4,7 @@
 /.DS_Store
 /core/apps/clients
 /STATIC
-/frontend
+# /frontend
 
 # /core/db.sqlite3
 # /core/apps/products_image
