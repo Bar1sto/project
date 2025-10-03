@@ -1,7 +1,7 @@
 import { use, useState } from 'react';
 import { Link } from 'react-router-dom';
 import styles from './Cart.module.css';
-import iconCart from '../../assets/корзина.svg';
+import iconCart from '../../assets/cart.svg';
 
 const Cart = () => {
 const [promoCode, setPromoCode] = useState('');

@@ -1,33 +1,32 @@
 import { Routes, Route, Link } from "react-router-dom";
-import Home from "./pages/Home.jsx";
+import Header from "./components/Header/Header.jsx";
+import Footer from "./components/Footer/Footer.jsx";
+import HomePage from "./pages/HomePage.jsx";
+import RegisterPage from "./pages/RegisterPage/RegisterPage.jsx";
+import BigProductPage from "./pages/BigProductPage.jsx";
+import ProfilePage from "./pages/ProfilePage.jsx";
+import FavoritesPage from "./pages/FavoritesPage.jsx";
+import CartPage from "./components/Cart/Cart.jsx";
+
+
 
 export default function App() {
   return (
     <div className="min-h-dvh flex flex-col">
-      <header className="border-b">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold tracking-tight">
-            #77 Hockey
-          </Link>
-          <nav className="flex gap-4 text-sm">
-            <Link to="/" className="hover:underline">Главная</Link>
-            <a href="/api/docs" className="hover:underline">API</a>
-          </nav>
-        </div>
-      </header>
+      <Header />
 
       <main className="flex-1">
         <Routes>
-          <Route path="/" element={<Home />} />
-          {/* тут дальше добавим остальные страницы */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/product" element={<BigProductPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/favorites" element={<FavoritesPage />} />
+          <Route path="/cart" element={<CartPage />} />
         </Routes>
       </main>
 
-      <footer className="border-t">
-        <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-neutral-500">
-          © {new Date().getFullYear()} Хоккейный магазин #77
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
