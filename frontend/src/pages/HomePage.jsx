@@ -3,6 +3,7 @@ import PopularSection from '../components/Sections/PopularSection/PopularSection
 import NewProductsSection from '../components/Sections/NewProductsSection/NewProductsSection';
 import SaleSection from '../components/Sections/SaleSection/SaleSection';
 
+
 const HomePage = () => {
   const popularProducts = [
     {
