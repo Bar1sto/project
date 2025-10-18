@@ -3,10 +3,10 @@ import { Profiler, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import logo from "../../assets/logo.png";
-import SearchIcon from "../../assets/search.svg?react";
-import UserIcon from "../../assets/profile.svg?react";
-import FavoriteIcon from "../../assets/favorite.svg?react";
-import CartIcon from "../../assets/cart.svg?react";
+import SearchIcon from "../../assets/icons/search.svg?react";
+import UserIcon from "../../assets/icons/profile.svg?react";
+import FavoriteIcon from "../../assets/icons/favorite.svg?react";
+import CartIcon from "../../assets/icons/cart.svg?react";
 
 // порядок колонок как в твоём макете: Игрок, Вратарь, Фигурное, Флорбол, Тренировка, Аксессуары
 const CATALOG = [
@@ -239,12 +239,12 @@ export default function Header() {
             сlassName="group p-2 hover:scale-110 transition" 
             aria-label="Корзина">
             <CartIcon className="
-           w-[clamp(20px,2vw,24px)] h-[clamp(20px,2vw,24px)]
+            w-[clamp(20px,2vw,24px)] h-[clamp(20px,2vw,24px)]
             text-[#1C1A61] 
-            group-hover:text-[#EC1822] 
+            group-hover:text-[#EC1822]
             transition-colors
             fill-[none]
-            [&_*]:stroke-current 
+            [&_*]:stroke-current
             [&_*]:stroke-2" />
           </Link>
         </div>

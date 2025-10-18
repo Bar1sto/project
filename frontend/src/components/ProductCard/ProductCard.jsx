@@ -2,7 +2,7 @@
 import { useState } from "react";
 
 // можно оставить png — как было у тебя
-import HeartIcon from "../../assets/heart.svg?react";
+import HeartIcon from "../../assets/icons/heart.svg?react";
 import { formatPrice } from "../../utils/format";
 
 
