@@ -187,7 +187,7 @@ export default function RegisterPage() {
                 value={loginPw}
                 onChange={(e) => setLoginPw(e.target.value)}
                 required
-                className="h-12 w-full rounded-xl border-2 border-[#1C1A61] bg-white pl-4 pr-12 placeholder:text-[#1C1A61]/60 outline-none focus:border-[#EC1822] transition"
+                className="h-12 w-full rounded-xl border-2 border-[#1C1A61] bg-white pl-4 pr-12 placeholder:text-[#1C1A61]/60 outline-none transition"
                 autoComplete="current-password"
               />
               <button
