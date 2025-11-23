@@ -1,4 +1,3 @@
-// src/pages/RegisterPage/RegisterPage.jsx
 import { useState, useMemo } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
@@ -24,6 +23,7 @@ export default function RegisterPage() {
   const [regFirstName, setRegFirstName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPhone, setRegPhone] = useState("");
+  const [regBirthday, setRegBirthday] = useState(""); // <- добавлено
   const [regPw1, setRegPw1] = useState("");
   const [regPw2, setRegPw2] = useState("");
   const [showRegPw1, setShowRegPw1] = useState(false);
@@ -45,14 +45,41 @@ export default function RegisterPage() {
       isValidEmail(regEmail) &&
       getRuPhoneDigits(regPhone)?.length === 11 &&
       regPw1.length >= 6 &&
-      regPw1 === regPw2,
-    [regLastName, regFirstName, regEmail, regPhone, regPw1, regPw2]
+      regPw1 === regPw2 &&
+      regBirthday.trim().length > 0, // <- учёт даты рождения
+    [regLastName, regFirstName, regEmail, regPhone, regPw1, regPw2, regBirthday]
   );
 
   const canSubmitLogin = useMemo(() => {
     if (loginEmail === "admin" && loginPw === "admin") return true;
     return isValidEmail(loginEmail) && loginPw.length >= 1;
   }, [loginEmail, loginPw]);
+
+  // простая нормализация даты: ожидаем DD.MM.YYYY или YYYY-MM-DD — приводим к YYYY-MM-DD
+  function normalizeBirthday(input) {
+    if (!input) return "";
+    const s = input.trim();
+    // если уже ISO-ish
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // если формат D[D].M[M].YYYY или DD.MM.YYYY
+    const dotMatch = s.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+    if (dotMatch) {
+      const d = dotMatch[1].padStart(2, "0");
+      const m = dotMatch[2].padStart(2, "0");
+      const y = dotMatch[3];
+      return `${y}-${m}-${d}`;
+    }
+    // последний шанс — если пользователь ввёл без точек 01012000
+    const compact = s.replace(/\D/g, "");
+    if (/^\d{8}$/.test(compact)) {
+      const d = compact.slice(0, 2);
+      const m = compact.slice(2, 4);
+      const y = compact.slice(4, 8);
+      return `${y}-${m}-${d}`;
+    }
+    // не смогли распознать — возвращаем то, что есть (бэк может валидировать формат)
+    return s;
+  }
 
   async function submitRegister(e) {
     e.preventDefault();
@@ -61,21 +88,53 @@ export default function RegisterPage() {
     setRegErr("");
 
     const payload = {
-      last_name: regLastName.trim(),
-      first_name: regFirstName.trim(),
+      surname: regLastName.trim(),
+      name: regFirstName.trim(),
       email: normalizeEmail(regEmail),
-      phone: getRuPhoneDigits(regPhone), // 79XXXXXXXXX
-      password1: regPw1,
+      phone_number: getRuPhoneDigits(regPhone), // 79XXXXXXXXX
+      password: regPw1,
       password2: regPw2,
-      username: normalizeEmail(regEmail),
+      birthday: normalizeBirthday(regBirthday), // <- добавлено
     };
 
-    const { ok } = await api.register(payload);
+    const { ok, error, data } = await api.register(payload);
+
     setRegBusy(false);
+
     if (!ok) {
-      setRegErr("Не удалось зарегистрироваться. Проверьте данные.");
+      // если бек вернул подробный объект ошибок — покажем первое поле
+      if (error && typeof error === "object") {
+        // пример: { birthday: ["Обязательное поле."] }
+        const firstKey = Object.keys(error)[0];
+        const firstMsg = Array.isArray(error[firstKey])
+          ? error[firstKey][0]
+          : String(error[firstKey]);
+        setRegErr(
+          firstMsg || "Не удалось зарегистрироваться. Проверьте данные."
+        );
+      } else {
+        setRegErr("Не удалось зарегистрироваться. Проверьте данные.");
+      }
+      console.log("register error:", error);
       return;
     }
+
+    // регистрация успешна — api.register уже должен положить токен (см api.js)
+    // обновляем контекст авторизации и грузим профиль
+    try {
+      setAuthed(true);
+      try {
+        const me = await api.getMe();
+        setUser(me);
+      } catch (meErr) {
+        // не критично — профиль подгрузится позже при переходе на /profile
+        console.warn("failed to load profile after register:", meErr);
+      }
+    } catch (e) {
+      console.warn("auth set error", e);
+    }
+
+    // редиректим в бэкет/профиль
     nav(backTo, { replace: true });
   }
 
@@ -101,6 +160,16 @@ export default function RegisterPage() {
       setLoginErr("Неверный логин или пароль.");
       return;
     }
+
+    // после логина подгружаем профиль в контекст
+    try {
+      setAuthed(true);
+      const me = await api.getMe();
+      setUser(me);
+    } catch (err) {
+      console.warn("failed to load profile after login", err);
+    }
+
     nav(backTo, { replace: true });
   }
 
@@ -144,6 +213,17 @@ export default function RegisterPage() {
 
             <EmailInput value={regEmail} onChange={setRegEmail} required />
             <PhoneInput value={regPhone} onChange={setRegPhone} required />
+
+            {/* Дата рождения */}
+            <input
+              type="text"
+              placeholder="Дата рождения (ДД.MM.ГГГГ)"
+              value={regBirthday}
+              onChange={(e) => setRegBirthday(e.target.value)}
+              required
+              className="h-12 w-full rounded-xl border-2 border-[#1C1A61] bg-white px-4 placeholder:text-[#1C1A61]/60 outline-none transition"
+              autoComplete="bday"
+            />
 
             {/* Пароль 1 */}
             <div className="relative">

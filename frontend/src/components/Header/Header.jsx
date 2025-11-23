@@ -1,14 +1,13 @@
-// src/components/Header/Header.jsx
 import { Profiler, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import logo from "../../assets/logo.png";
 import SearchIcon from "../../assets/icons/search.svg?react";
 import UserIcon from "../../assets/icons/profile.svg?react";
 import FavoriteIcon from "../../assets/icons/favorite.svg?react";
 import CartIcon from "../../assets/icons/cart.svg?react";
+import api from "../../lib/api"; // <-- вот это добавь
 
-// порядок колонок как в твоём макете: Игрок, Вратарь, Фигурное, Флорбол, Тренировка, Аксессуары
 const CATALOG = [
   {
     title: "Игрок",
@@ -68,6 +67,17 @@ const isNode = (x) =>
 
 export default function Header() {
   const location = useLocation();
+  const navigate = useNavigate(); // <-- уже импортирован, начинаем использовать
+
+  const handleProfileClick = () => {
+    // если есть токен — ведём в личный кабинет
+    if (api.hasToken()) {
+      navigate("/profile");
+    } else {
+      // нет токена — на страницу регистрации/авторизации
+      navigate("/register");
+    }
+  };
 
   // поиск
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -194,58 +204,68 @@ export default function Header() {
             className="group p-2 hover:scale-110 transition"
             aria-label="Поиск"
           >
-            <SearchIcon className="
+            <SearchIcon
+              className="
             w-[clamp(20px,2vw,24px)] h-[clamp(20px,2vw,24px)]
             text-[#1C1A61] 
             group-hover:text-[#EC1822] 
             transition-colors
             fill-[none]
             [&_*]:stroke-current 
-            [&_*]:stroke-2" />
+            [&_*]:stroke-2"
+            />
           </button>
 
-          <Link
-            to="/register"
+          <button
+            type="button"
+            onClick={handleProfileClick}
             className="group p-2 hover:scale-110 transition"
             aria-label="Профиль"
           >
-           <UserIcon className="
+            <UserIcon
+              className="
             w-[clamp(20px,2vw,24px)] h-[clamp(20px,2vw,24px)]
             text-[#1C1A61] 
             group-hover:text-[#EC1822] 
             transition-colors
             fill-[none]
             [&_*]:stroke-current 
-            [&_*]:stroke-2" />
-          </Link>
+            [&_*]:stroke-2"
+            />
+          </button>
 
           <Link
             to="/favorites"
             className="group p-2 hover:scale-110 transition"
             aria-label="Избранное"
           >
-           <FavoriteIcon className="
+            <FavoriteIcon
+              className="
             w-[clamp(20px,2vw,24px)] h-[clamp(20px,2vw,24px)]
             text-[#1C1A61] 
             group-hover:text-[#EC1822] 
             transition-colors
             fill-[none]
             [&_*]:stroke-current 
-            [&_*]:stroke-2" />
+            [&_*]:stroke-2"
+            />
           </Link>
 
           <Link
             to="/cart"
-            сlassName="group p-2 hover:scale-110 transition" 
-            aria-label="Корзина">
-            <CartIcon className="
+            className="group p-2 hover:scale-110 transition"
+            aria-label="Корзина"
+          >
+            <CartIcon
+              className="
             w-[clamp(20px,2vw,24px)] h-[clamp(20px,2vw,24px)]
             text-[#1C1A61] 
             group-hover:text-[#EC1822]
             transition-colors
             fill-[none]
             [&_*]:stroke-current
-            [&_*]:stroke-2" />
+            [&_*]:stroke-2"
+            />
           </Link>
         </div>
       </div>

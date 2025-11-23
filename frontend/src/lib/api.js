@@ -75,21 +75,15 @@ export const api = {
   },
 
   async register(payload) {
-    // если у тебя есть свой эндпоинт регистрации — попробуем его
-    let r = await api._fetch("/clients/register/", {
+    const r = await api._fetch("/clients/register/", {
       method: "POST",
       body: payload,
     });
-    // иначе — dj-rest-auth registration (если подключено)
-    if (!r.ok)
-      r = await api._fetch("/dj-rest-auth/registration/", {
-        method: "POST",
-        body: payload,
-      });
 
-    if (!r.ok) return { ok: false, error: r.data };
+    if (!r.ok) {
+      return { ok: false, error: r.data, status: r.status };
+    }
 
-    // если регистрация сразу выдала токен — сохраним
     const access =
       r.data?.access ||
       r.data?.token ||
@@ -98,7 +92,7 @@ export const api = {
       "";
     if (access) setToken(access);
 
-    return { ok: true };
+    return { ok: true, data: r.data };
   },
 
   logout() {

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Container from "../ui/Container";
 import ProductCard from "../ProductCard/ProductCard";
+import api from "../../lib/api";
+import { toAbsMedia } from "../../config/api";
 
 /* — утилиты — */
 const STEP = 32;
@@ -13,6 +15,7 @@ function fmtPhone(raw) {
   const x = d.padStart(11, "7").slice(0, 11).split("");
   return `+${x[0]} (${x[1]}${x[2]}${x[3]}) ${x[4]}${x[5]}${x[6]}-${x[7]}${x[8]}-${x[9]}${x[10]}`;
 }
+
 function bearer() {
   const t =
     localStorage.getItem("access") ||
@@ -20,6 +23,7 @@ function bearer() {
     localStorage.getItem("authToken");
   return t ? `Bearer ${t}` : null;
 }
+
 async function tryGet(url) {
   const r = await fetch(url, {
     headers: {
@@ -27,20 +31,22 @@ async function tryGet(url) {
       "Content-Type": "application/json",
       ...(bearer() ? { Authorization: bearer() } : {}),
     },
-    // КЛЮЧЕВОЕ: куки не отправляем
-    credentials: "omit",
+    credentials: "include",
   });
   if (!r.ok) throw new Error(String(r.status));
   return r.json();
 }
 
-/* — настроить под ваш бек — */
+/* — Эндпоинты под наш бек — */
 const API_BASE = "/api";
 const EP = {
+  // /api/clients/me/ — наш актуальный профиль
   me: ["/clients/me/", "/customers/me/", "/users/me/", "/auth/user/"],
-  favorites: ["/products/favorites/", "/favorites/"],
+  // /favorites/ есть на бэке, ставим первым
+  favorites: ["/favorites/", "/products/favorites/"],
   orders: ["/orders/", "/orders/history/"],
 };
+
 async function firstOk(paths) {
   for (const p of paths) {
     try {
@@ -55,16 +61,20 @@ export default function Profile() {
   const [favorites, setFavorites] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState(null);
 
   const [activeTab, setActiveTab] = useState(null); // 'history' | 'favorites' | 'cert' | 'settings'
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
+
     (async () => {
       try {
         setLoading(true);
         const haveToken = !!bearer();
+
         if (haveToken) {
           const [u, fav, ord] = await Promise.allSettled([
             firstOk(EP.me),
@@ -72,19 +82,35 @@ export default function Profile() {
             firstOk(EP.orders),
           ]);
           if (!alive) return;
-          setMe(
-            u.status === "fulfilled"
-              ? u.value
-              : {
-                  first_name: "Вадим",
-                  last_name: "Ропотан",
-                  team: "Авангард Омск",
-                  phone: "7777777777",
-                  birth_date: "01.01.2025",
-                  bonuses: "10 990",
-                  avatar: "",
-                }
-          );
+
+          const demoMe = {
+            first_name: "Вадим",
+            last_name: "Ропотан",
+            team: "Авангард Омск",
+            phone: "7777777777",
+            birth_date: "01.01.2025",
+            bonuses: "10 990",
+            avatar: "",
+          };
+
+          let normalizedMe = demoMe;
+
+          if (u.status === "fulfilled" && u.value) {
+            const raw = u.value;
+            normalizedMe = {
+              ...raw,
+              // приводим поля бэка к тем, что ждёт вёрстка
+              last_name: raw.last_name || raw.surname || demoMe.last_name,
+              first_name: raw.first_name || raw.name || demoMe.first_name,
+              team: raw.team || demoMe.team,
+              phone: raw.phone || raw.phone_number || demoMe.phone,
+              birth_date: raw.birth_date || raw.birthday || demoMe.birth_date,
+              avatar: raw.avatar || raw.image || demoMe.avatar,
+            };
+          }
+
+          setMe(normalizedMe);
+
           setFavorites(
             fav.status === "fulfilled"
               ? (fav.value.results || fav.value || []).map(mapApiProduct)
@@ -112,7 +138,10 @@ export default function Profile() {
         if (alive) setLoading(false);
       }
     })();
-    return () => (alive = false);
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const fullName = useMemo(() => {
@@ -135,10 +164,52 @@ export default function Profile() {
     if (activeTab !== "settings") return;
     fileInputRef.current?.click();
   };
-  const handleAvatarChange = (e) => {
+
+  const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // TODO: загрузка аватара
+
+    // локальный быстрый превью
+    const previewUrl = URL.createObjectURL(file);
+    setMe((prev) => (prev ? { ...prev, avatar: previewUrl } : prev));
+
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      // загружаем файл на бэк
+      const uploaded = await api.uploadAvatar(file); // ожидаем строку или объект
+      // uploaded может быть "/media/..", или {"avatar": "/media/..."} в зависимости от бек
+      // нормализуем:
+      let uploadedPath = uploaded;
+      if (uploaded && typeof uploaded === "object") {
+        uploadedPath =
+          uploaded.avatar || uploaded.url || Object.values(uploaded)[0];
+      }
+      if (!uploadedPath) throw new Error("upload returned empty path");
+
+      // Если бек возвращает относительный путь — делаем абсолютный для отображения
+      const absolute = toAbsMedia(uploadedPath);
+
+      // ВАЖНО: чтобы значение стойко сохранилось в профиле, апдейтим профиль на бек:
+      try {
+        await api.updateMe({ image: uploadedPath }); // отправляем относительный путь или то, что вернул бек
+      } catch (err) {
+        // может не быть эндпоинта, тогда лог и продолжение — но сообщим пользователю
+        console.warn("failed to update profile image field:", err);
+      }
+
+      // локально обновляем профиль изображением из ответа
+      setMe((prev) =>
+        prev ? { ...prev, avatar: absolute, image: uploadedPath } : prev
+      );
+    } catch (err) {
+      console.error("avatar upload failed", err);
+      setAvatarError("Не удалось загрузить фото");
+      // опционально откатить превью:
+      // setMe(prev => ({ ...prev, avatar: prev?.image || "" }));
+    } finally {
+      setAvatarUploading(false);
+    }
   };
 
   const [edit, setEdit] = useState(null);
@@ -156,14 +227,23 @@ export default function Profile() {
 
   const saveSettings = async () => {
     if (!edit) return;
-    // TODO: PATCH/PUT на бек
+    // TODO: PATCH/PUT на бек /api/clients/me/
     setMe((m) => ({ ...m, ...edit }));
     setActiveTab(null);
   };
 
+  const handleLogout = () => {
+    // вычищаем токены и уводим на главную
+    localStorage.removeItem("access");
+    localStorage.removeItem("refresh");
+    localStorage.removeItem("token");
+    localStorage.removeItem("authToken");
+    window.location.href = "/";
+  };
+
   return (
     <Container className="font-[Actay] text-[#1C1A61]">
-      {/* Крошки */}
+      {/* Крошки — НЕ трогал */}
       <div className="mb-6 text-[15px]">
         <Link to="/" className="hover:text-[#EC1822] transition">
           Главная
@@ -180,15 +260,15 @@ export default function Profile() {
       <section className="relative mb-12 isolate">
         <div className="grid grid-cols-1 md:grid-cols-[360px,1fr] md:grid-rows-[auto,auto] gap-x-6 gap-y-6 md:gap-y-0">
           {/* Фото */}
-          <div className="md:col-start-1 md:row-start-1 relative z-10">
+          <div className="md:col-start-1 md:row-start-1 relative z-10 mb-6 md:mb-0">
             <div className="bg-[#E5E5E5] rounded-[14px] p-5 shadow-sm">
               <div
                 className="relative w-full aspect-square rounded-[14px] border border-[#1C1A61] bg-[#F3F3F3] overflow-hidden flex items-center justify-center"
                 onClick={handleAvatarClick}
               >
-                {me?.avatar ? (
+                {me?.avatar || me?.image ? (
                   <img
-                    src={me.avatar}
+                    src={me.avatar || me.image}
                     alt={fullName || "Аватар"}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
@@ -282,7 +362,7 @@ export default function Profile() {
                           placeholder="ДД.ММ.ГГГГ"
                         />
                       ) : (
-                        me.birth_date || "—"
+                        me.birth_date || me.birthday || "—"
                       )}
                     </div>
                   </div>
@@ -291,7 +371,7 @@ export default function Profile() {
                     <div>
                       <div className="text-[18px]">Сумма бонусов</div>
                       <div className="text-[46px] font-extrabold leading-none">
-                        {me?.bonuses ?? "0"}
+                        {me?.total_bonus ?? me?.bonuses ?? "0"}
                       </div>
                     </div>
                     <button
@@ -336,7 +416,7 @@ export default function Profile() {
                     {orders.map((o) => (
                       <div
                         key={o.id || o.number}
-                        className="flex flex-col md:flex-row md:items-center justify-between gap-2 border border-[#1C1A61]/20 rounded-[12px] px-4 py-3 bg-[#F6F6F6]"
+                        className="flex flex-col md:flex-row md:items-center justify_between gap-2 border border-[#1C1A61]/20 rounded-[12px] px-4 py-3 bg-[#F6F6F6]"
                       >
                         <div>
                           <div className="font-bold text-[18px]">
@@ -411,7 +491,7 @@ export default function Profile() {
                 )}
               </li>
 
-              {/* — Настройки — */}
+              {/* — Настройки + ВЫЙТИ — */}
               <li className="py-2">
                 <button
                   type="button"
@@ -425,7 +505,7 @@ export default function Profile() {
 
                 {activeTab === "settings" && (
                   <div className="mt-4 text-[16px] font-normal">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <button
                         type="button"
                         onClick={saveSettings}
@@ -439,6 +519,13 @@ export default function Profile() {
                         className="text-[#1C1A61]/70 hover:text-[#EC1822] underline underline-offset-4"
                       >
                         Отмена
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="text-[#EC1822] hover:text-[#b61018] underline underline-offset-4"
+                      >
+                        Выйти из аккаунта
                       </button>
                     </div>
                   </div>
@@ -474,6 +561,7 @@ const DEMO_ORDERS = [
   { id: 1, number: "000123", total: "10 990 ₽", date: "01.10.2025" },
   { id: 2, number: "000122", total: "7 450 ₽", date: "20.09.2025" },
 ];
+
 const DEMO_FAVORITES = [
   {
     id: 1,
@@ -488,6 +576,7 @@ const DEMO_FAVORITES = [
     image: "/images/pr.png",
   },
 ];
+
 function mapApiProduct(p) {
   return {
     id: p.id,
@@ -499,6 +588,7 @@ function mapApiProduct(p) {
     is_sale: p.is_sale ?? false,
   };
 }
+
 function mapDemoProduct(p) {
   return {
     id: p.id,
