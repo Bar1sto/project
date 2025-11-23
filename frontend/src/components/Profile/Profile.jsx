@@ -27,7 +27,8 @@ async function tryGet(url) {
       "Content-Type": "application/json",
       ...(bearer() ? { Authorization: bearer() } : {}),
     },
-    credentials: "include",
+    // КЛЮЧЕВОЕ: куки не отправляем
+    credentials: "omit",
   });
   if (!r.ok) throw new Error(String(r.status));
   return r.json();
@@ -36,7 +37,7 @@ async function tryGet(url) {
 /* — настроить под ваш бек — */
 const API_BASE = "/api";
 const EP = {
-  me: ["/customers/me/", "/users/me/", "/auth/user/"],
+  me: ["/clients/me/", "/customers/me/", "/users/me/", "/auth/user/"],
   favorites: ["/products/favorites/", "/favorites/"],
   orders: ["/orders/", "/orders/history/"],
 };
