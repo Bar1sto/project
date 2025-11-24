@@ -127,16 +127,24 @@ export const api = {
 
   async uploadAvatar(file) {
     const fd = new FormData();
-    fd.append("avatar", file);
-    const paths = [
-      "/clients/me/avatar/",
-      "/customers/me/avatar/",
-      "/users/me/avatar/",
-    ];
+    // поле в сериализаторе — image
+    fd.append("image", file);
+
+    // наш реальный эндпоинт — /api/clients/me/
+    const paths = ["/clients/me/", "/customers/me/", "/users/me/"];
+
     for (const p of paths) {
-      const r = await api._fetch(p, { method: "POST", isForm: true, body: fd });
-      if (r.ok) return r.data?.avatar || r.data?.url || null;
+      const r = await api._fetch(p, {
+        method: "PATCH",
+        isForm: true,
+        body: fd,
+      });
+
+      if (r.ok) {
+        return r.data?.image || r.data?.avatar || null;
+      }
     }
+
     throw new Error("avatar_upload_failed");
   },
 

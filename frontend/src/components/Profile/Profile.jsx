@@ -175,28 +175,23 @@ export default function Profile() {
 
     setAvatarUploading(true);
     setAvatarError(null);
+
     try {
-      // загружаем файл на бэк
-      const uploaded = await api.uploadAvatar(file); // ожидаем строку или объект
-      // uploaded может быть "/media/..", или {"avatar": "/media/..."} в зависимости от бек
-      // нормализуем:
+      // загружаем файл на бэк через PATCH /clients/me/ с полем image
+      const uploaded = await api.uploadAvatar(file); // теперь возвращает строку пути или null
+
       let uploadedPath = uploaded;
       if (uploaded && typeof uploaded === "object") {
         uploadedPath =
-          uploaded.avatar || uploaded.url || Object.values(uploaded)[0];
+          uploaded.image ||
+          uploaded.avatar ||
+          uploaded.url ||
+          Object.values(uploaded)[0];
       }
       if (!uploadedPath) throw new Error("upload returned empty path");
 
-      // Если бек возвращает относительный путь — делаем абсолютный для отображения
+      // делаем абсолютный URL для <img src="...">
       const absolute = toAbsMedia(uploadedPath);
-
-      // ВАЖНО: чтобы значение стойко сохранилось в профиле, апдейтим профиль на бек:
-      try {
-        await api.updateMe({ image: uploadedPath }); // отправляем относительный путь или то, что вернул бек
-      } catch (err) {
-        // может не быть эндпоинта, тогда лог и продолжение — но сообщим пользователю
-        console.warn("failed to update profile image field:", err);
-      }
 
       // локально обновляем профиль изображением из ответа
       setMe((prev) =>
@@ -205,8 +200,6 @@ export default function Profile() {
     } catch (err) {
       console.error("avatar upload failed", err);
       setAvatarError("Не удалось загрузить фото");
-      // опционально откатить превью:
-      // setMe(prev => ({ ...prev, avatar: prev?.image || "" }));
     } finally {
       setAvatarUploading(false);
     }
