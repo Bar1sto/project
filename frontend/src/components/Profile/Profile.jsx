@@ -573,6 +573,7 @@ const DEMO_FAVORITES = [
 function mapApiProduct(p) {
   return {
     id: p.id,
+    slug: p.slug || p.slug_name || p.url_key || String(p.id),
     name: p.name || p.title,
     brand: p.brand_name || p.brand?.name,
     price: p.price || p.current_price || 0,

@@ -1,38 +1,40 @@
-from rest_framework import serializers
 from apps.products.models import (
+    Brand,
+    Category,
     Product,
     ProductVariant,
-    Category,
-    Brand,
 )
+from rest_framework import serializers
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariant
         fields = (
-            'size_type',
-            'size_value',
-            'color',
-            'current_price',
-            'is_active',
-            'is_order',
+            "id",
+            "size_type",
+            "size_value",
+            "color",
+            "current_price",
+            "is_active",
+            "is_order",
         )
-        
+
+
 class BrandSerializer(serializers.ModelSerializer):
     class Meta:
         model = Brand
-        fields = (
-            'name',
-        )
+        fields = ("name",)
+
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = (
-            'name',
-            'parent',
-            )
+            "name",
+            "parent",
+        )
+
 
 class ProductSerializer(serializers.ModelSerializer):
     is_favorited = serializers.BooleanField(read_only=True)
@@ -42,30 +44,33 @@ class ProductSerializer(serializers.ModelSerializer):
     )
     brand = serializers.SlugRelatedField(
         read_only=True,
-        slug_field='name',
+        slug_field="name",
     )
     category = serializers.SlugRelatedField(
         read_only=True,
-        slug_field='name',
+        slug_field="name",
     )
-    
+
     class Meta:
         model = Product
         fields = (
-            'slug',
-            'name',
-            'brand',
-            'category',
-            'description',
-            'image',
-            'is_sale',
-            'is_new',
-            'is_active',
-            'sale',
-            'variants',
-            'is_favorited',
+            "id",
+            "slug",
+            "name",
+            "brand",
+            "category",
+            "description",
+            "image",
+            "is_sale",
+            "is_new",
+            "is_active",
+            "sale",
+            "price",
+            "variants",
+            "is_favorited",
         )
-        
+
+
 class ProductListSerializer(serializers.ModelSerializer):
     is_favorited = serializers.BooleanField(read_only=True)
     min_price = serializers.DecimalField(
@@ -73,13 +78,14 @@ class ProductListSerializer(serializers.ModelSerializer):
         decimal_places=2,
         read_only=True,
     )
+
     class Meta:
         model = Product
         fields = (
-            'slug',
-            'name',
-            'price',
-            'image',
-            'is_favorited',
-            'min_price',
+            "slug",
+            "name",
+            "price",
+            "image",
+            "is_favorited",
+            "min_price",
         )

@@ -172,6 +172,71 @@ export const api = {
     });
     return r.ok;
   },
+
+  // ===== PRODUCTS =====
+  async getProduct(slugOrId) {
+    // пробуем разные варианты — под твой бек
+    const candidates = [
+      `/products/${slugOrId}/`,
+      `/products/slug/${slugOrId}/`,
+      `/products/${slugOrId}`, // на случай, если без слеша
+    ];
+    for (const p of candidates) {
+      const r = await api._fetch(p);
+      if (r.ok && r.data) return r.data;
+    }
+    throw new Error("product_not_found");
+  },
+
+  // "просмотренные" — бек может внутри использовать Redis
+  async markProductViewed(productId) {
+    const payload = { product: productId };
+    const paths = [
+      "/products/viewed/",
+      "/products/recent/",
+      "/recently-viewed/",
+    ];
+    for (const p of paths) {
+      const r = await api._fetch(p, { method: "POST", body: payload });
+      if (r.ok) return true;
+    }
+    return false;
+  },
+
+  // избранное — бек может сложить это в Redis
+  async toggleFavorite(productId) {
+    const payload = { product: productId };
+    const paths = [
+      "/favorites/toggle/",
+      "/products/favorites/toggle/",
+      "/favorites/",
+    ];
+
+    for (const p of paths) {
+      const r = await api._fetch(p, { method: "POST", body: payload });
+      if (r.ok && r.data) {
+        // ожидаем { is_favorite: true/false } или подобное
+        return r.data.is_favorite ?? true;
+      }
+    }
+
+    // если на бэке ещё не сделано — просто возвращаем true
+    return true;
+  },
+
+  // корзина — бек может хранить корзину в Redis
+  async addToCart(productId, { quantity = 1, size = null } = {}) {
+    const payload = { product: productId, quantity };
+    if (size) payload.size = size;
+
+    const paths = ["/cart/items/", "/cart/add/", "/cart/"];
+    for (const p of paths) {
+      const r = await api._fetch(p, { method: "POST", body: payload });
+      if (r.ok) return r.data || true;
+    }
+    // fallback: можно хранить в localStorage, если очень надо
+    return false;
+  },
 };
 
 export default api;

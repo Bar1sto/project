@@ -1,38 +1,55 @@
-// src/components/ProductCard/ProductCard.jsx
-import { useState } from "react";
-
-// можно оставить png — как было у тебя
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import HeartIcon from "../../assets/icons/heart.svg?react";
-import { formatPrice } from "../../utils/format";
+import api from "../../lib/api";
 
-
-/**
- * Ожидаем props.product:
- * {
- *   image: string,
- *   name: string,
- *   brand?: string,
- *   price: number,
- *   is_new?: boolean,
- *   is_sale?: boolean
- * }
- */
 export default function ProductCard({ product }) {
   const [isFavorite, setIsFavorite] = useState(false);
-  const formatPrice = (n) =>
+  const slug = product.slug || product.id;
+  const navigate = useNavigate();
+  const goToProduct = () => navigate(`/product/${encodeURIComponent(slug)}`);
+  const [qty, setQty] = useState(0);
+  const [variantId, setVariantId] = useState(null);
+  const [cartBudy, SetCartBusy] = useState(false);
 
-  new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(n).replace(/\u00A0/g, " ");
-  
-  const priceText = formatPrice(product?.price)
+  const formatPrice = (n) =>
+    new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 })
+      .format(n)
+      .replace(/\u00A0/g, " ");
+
+  const priceText = formatPrice(product?.price);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        if (!slug) return;
+        const detail = await api.getProduct(slug);
+        const first = (detail?.variants || [])[0];
+        if (!alive) return;
+        setVariantId(first?.id ?? null);
+      } catch {
+        // если не получилось — просто не даём работать корзине (пока)
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [slug]);
 
   return (
     <article
+      onClick={goToProduct}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && goToProduct()}
       className="
         font-[Actay]
         bg-[#E5E5E5] rounded-[10px] overflow-hidden
         w-[250px] h-[500px]
         flex flex-col
         transition-all duration-300
+        cursor-pointer
       "
     >
       {/* фото-бокс */}
@@ -95,29 +112,88 @@ export default function ProductCard({ product }) {
         {/* ВАЖНО: этот контейнер прижимает НИЗ карточки */}
         <div className="mt-auto pt-[8px] pb-[16px]">
           {/* цена */}
-          <p className="text-[36px] font-bold mb-[1px] px-[8px] whitespace-nowrap ">9999</p>
+          <p className="text-[36px] font-bold mb-[1px] px-[8px] whitespace-nowrap ">
+            9999
+          </p>
 
           {/* кнопки */}
           <div className="flex justify-center gap-[8px] px-[8px]">
             {/* В КОРЗИНУ — как было в CSS */}
-            <button
-              type="button"
-              className="
-          flex-1
-          bg-[#1C1A61] text-white
-          px-[12px] py-[8px] rounded-[10px]
-          text-[24px]
-          transition-colors duration-300
-          hover:bg-[#EC1822]
-        "
-            >
-              В корзину
-            </button>
+            {qty <= 0 ? (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!variantId || cartBusy) return;
+                  setCartBusy(true);
+                  try {
+                    await api.setCartItem(variantId, 1);
+                    setQty(1);
+                  } finally {
+                    setCartBusy(false);
+                  }
+                }}
+                className="flex-1 bg-[#1C1A61] text-white px-[12px] py-[8px] rounded-[10px] text-[24px] transition-colors duration-300 hover:bg-[#EC1822]"
+              >
+                В корзину
+              </button>
+            ) : (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex-1 bg-[#1C1A61] text-white px-[12px] py-[8px] rounded-[10px] flex items-center justify-between text-[20px]"
+              >
+                <button
+                  type="button"
+                  disabled={cartBusy}
+                  onClick={async () => {
+                    if (!variantId || cartBusy) return;
+                    const next = qty - 1;
+                    setCartBusy(true);
+                    try {
+                      if (next <= 0) {
+                        await api.deleteCartItem(variantId);
+                        setQty(0);
+                      } else {
+                        await api.setCartItem(variantId, next);
+                        setQty(next);
+                      }
+                    } finally {
+                      setCartBusy(false);
+                    }
+                  }}
+                  className="w-8 h-8 rounded-md hover:bg-white/10"
+                >
+                  –
+                </button>
+                <span className="min-w-6 text-center font-semibold">{qty}</span>
+                <button
+                  type="button"
+                  disabled={cartBusy}
+                  onClick={async () => {
+                    if (!variantId || cartBusy) return;
+                    const next = qty + 1;
+                    setCartBusy(true);
+                    try {
+                      await api.setCartItem(variantId, next);
+                      setQty(next);
+                    } finally {
+                      setCartBusy(false);
+                    }
+                  }}
+                  className="w-8 h-8 rounded-md hover:bg-white/10"
+                >
+                  +
+                </button>
+              </div>
+            )}
 
             {/* ИЗБРАННОЕ — контур по умолчанию, заливка при клике */}
             <button
               type="button"
-              onClick={() => setIsFavorite((v) => !v)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsFavorite((v) => !v);
+              }}
               className="
           group
           w-[40px] h-[40px] mt-[5px]

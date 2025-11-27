@@ -4,6 +4,8 @@
 /.DS_Store
 /core/apps/clients
 /STATIC
+/core.zip
+/frontend.zip
 # /frontend
 
 # /core/db.sqlite3
