@@ -64,6 +64,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "is_sale",
             "is_new",
             "is_active",
+            "is_hit",
             "sale",
             "price",
             "variants",
@@ -88,4 +89,8 @@ class ProductListSerializer(serializers.ModelSerializer):
             "image",
             "is_favorited",
             "min_price",
+            "is_sale",
+            "is_new",
+            "is_hit",
+            "sale",
         )

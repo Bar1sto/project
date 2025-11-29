@@ -11,7 +11,7 @@ const Favorites = () => {
             brand: "АСПО ВЕТА",
             type: "White 35 95 Round",
             price: "18 990",
-            image: "/images/pr.png",
+            image: null,
             isHit: true
         },
         {
@@ -19,7 +19,7 @@ const Favorites = () => {
             name: "Перчатки FISCHER",
             brand: "CT150 JR",
             price: "1 990",
-            image: "/images/pr.png"
+            image: null
         },
         // ... другие товары
     ];

@@ -78,7 +78,7 @@ export default function Profile() {
         if (haveToken) {
           const [u, fav, ord] = await Promise.allSettled([
             firstOk(EP.me),
-            firstOk(EP.favorites),
+            api.getFavorites(),
             firstOk(EP.orders),
           ]);
           if (!alive) return;
@@ -113,7 +113,7 @@ export default function Profile() {
 
           setFavorites(
             fav.status === "fulfilled"
-              ? (fav.value.results || fav.value || []).map(mapApiProduct)
+              ? (fav.value || []).map(mapApiProduct)
               : DEMO_FAVORITES.map(mapDemoProduct)
           );
           setOrders(
@@ -139,8 +139,33 @@ export default function Profile() {
       }
     })();
 
+    const reloadFavorites = async () => {
+      try {
+        // ВАЖНО: берём избранное через api.getFavorites() (он ходит на /favorites/)
+        const favs = await api.getFavorites();
+        const arr = Array.isArray(favs?.results)
+          ? favs.results
+          : Array.isArray(favs)
+          ? favs
+          : [];
+        if (!alive) return;
+        setFavorites(arr.map(mapApiProduct));
+      } catch (e) {
+        if (!alive) return;
+        setFavorites([]);
+      }
+    };
+
+    // 1) загрузили один раз при входе в профиль
+    reloadFavorites();
+
+    // 2) и перезагружаем, когда где-то нажали сердце
+    const onFavChanged = () => reloadFavorites();
+    window.addEventListener("favorites:changed", onFavChanged);
+
     return () => {
       alive = false;
+      window.removeEventListener("favorites:changed", onFavChanged);
     };
   }, []);
 
@@ -454,7 +479,7 @@ export default function Profile() {
                 {activeTab === "favorites" && (
                   <div className="mt-4 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 text-[16px] font-normal">
                     {favorites.map((p) => (
-                      <ProductCard key={p.id} product={p} />
+                      <ProductCard key={p.slug || p.id} product={p} />
                     ))}
                     {!favorites?.length && (
                       <div className="text-[#1C1A61]/60">
@@ -550,25 +575,9 @@ function InlineEdit({ value, onChange, className = "", placeholder = "" }) {
 }
 
 /* — демо и мапперы — */
-const DEMO_ORDERS = [
-  { id: 1, number: "000123", total: "10 990 ₽", date: "01.10.2025" },
-  { id: 2, number: "000122", total: "7 450 ₽", date: "20.09.2025" },
-];
+const DEMO_ORDERS = [];
 
-const DEMO_FAVORITES = [
-  {
-    id: 1,
-    name: "Клюшка флорбольная ACITO BETA",
-    price: 18990,
-    image: "/images/pr.png",
-  },
-  {
-    id: 2,
-    name: "Перчатки FISCHER CT150 JR",
-    price: 1990,
-    image: "/images/pr.png",
-  },
-];
+const DEMO_FAVORITES = [];
 
 function mapApiProduct(p) {
   return {
@@ -577,7 +586,7 @@ function mapApiProduct(p) {
     name: p.name || p.title,
     brand: p.brand_name || p.brand?.name,
     price: p.price || p.current_price || 0,
-    image: p.image || p.images?.[0] || "/images/pr.png",
+    image: p.image || p.images?.[0] || null,
     is_new: p.is_new ?? false,
     is_sale: p.is_sale ?? false,
   };

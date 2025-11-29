@@ -1,41 +1,89 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import HeartIcon from "../../assets/icons/heart.svg?react";
 import api from "../../lib/api";
+import { useAuth } from "../../context/AuthContext";
 
+const FAV_LS_KEY = "fav_slugs";
+
+function getFavSet() {
+  try {
+    const raw = localStorage.getItem(FAV_LS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveFavSet(set) {
+  localStorage.setItem(FAV_LS_KEY, JSON.stringify([...set]));
+}
 export default function ProductCard({ product }) {
-  const [isFavorite, setIsFavorite] = useState(false);
-  const slug = product.slug || product.id;
+  const [isFavorite, setIsFavorite] = useState(!!product?.isFavorited);
+  const slug = product?.slug;
+  const goToProduct = () => {
+    if (!slug) return;
+    navigate(`/product/${encodeURIComponent(slug)}`);
+  };
   const navigate = useNavigate();
-  const goToProduct = () => navigate(`/product/${encodeURIComponent(slug)}`);
+  const { authed } = useAuth();
   const [qty, setQty] = useState(0);
   const [variantId, setVariantId] = useState(null);
-  const [cartBudy, SetCartBusy] = useState(false);
+  const [cartBusy, setCartBusy] = useState(false);
+  const priceText =
+    product?.price === null || product?.price === undefined
+      ? "—"
+      : new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 })
+          .format(Number(product.price))
+          .replace(/\u00A0/g, " ");
 
   const formatPrice = (n) =>
     new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 })
       .format(n)
       .replace(/\u00A0/g, " ");
 
-  const priceText = formatPrice(product?.price);
+  const priceValue =
+    product?.price === null ||
+    product?.price === undefined ||
+    product?.price === ""
+      ? null
+      : Number(product.price);
 
+  async function ensureVariantId() {
+    if (variantId) return variantId;
+    if (!slug) return null;
+
+    try {
+      const detail = await api.getProduct(slug);
+      const first = (detail?.variants || [])[0];
+      const id = first?.id ?? null;
+      setVariantId(id);
+      return id;
+    } catch {
+      return null;
+    }
+  }
+  console.log(product?.slug, product?.isFavorited, product?.is_favorited);
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        if (!slug) return;
-        const detail = await api.getProduct(slug);
-        const first = (detail?.variants || [])[0];
-        if (!alive) return;
-        setVariantId(first?.id ?? null);
-      } catch {
-        // если не получилось — просто не даём работать корзине (пока)
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [slug]);
+    if (!slug) return;
+
+    const fromApi = product?.isFavorited ?? product?.is_favorited;
+    if (typeof fromApi === "boolean") {
+      setIsFavorite(fromApi);
+
+      // синхронизируем localStorage под API (чтобы не было рассинхрона)
+      const set = getFavSet();
+      if (fromApi) set.add(slug);
+      else set.delete(slug);
+      saveFavSet(set);
+      return;
+    }
+
+    // fallback: только localStorage
+    const set = getFavSet();
+    setIsFavorite(set.has(slug));
+  }, [slug, product?.isFavorited, product?.is_favorited]);
 
   return (
     <article
@@ -66,35 +114,37 @@ export default function ProductCard({ product }) {
         {product?.image ? (
           <img
             src={product.image}
-            alt={product?.name || "Фото товара"}
-            className="max-w-full max-h-[180px] object-contain"
+            alt={product?.name}
+            className="w-full h-full object-contain"
           />
         ) : (
-          <div
-            className="
-              w-full h-[180px] flex items-center justify-center
-              text-[24px] text-[#1C1A61]
-            "
-          >
-            ФОТО
+          <div className="w-full h-full flex items-center justify-center text-[#1C1A61]/70">
+            Фото
           </div>
         )}
       </div>
 
       {/* инфо-блок карточки */}
       <div className="flex-1 flex flex-col px-[16px] text-[#1C1A61]">
-        {/* BADGE "ХИТ" (фиксированно показать — оставь как есть) */}
-        <span
-          className="
-      inline-block
-      w-[42px] h-[20px] rounded-full mt-[15px]
-      bg-[#EC1822] text-white
-      text-[12px] leading-[16px]
-      px-[8px] py-[2px] mb-[6px]
-    "
-        >
-          ХИТ
-        </span>
+        <div className="flex flex-wrap items-center gap-2 mt-[15px] mb-[6px]">
+          {product?.isHit ? (
+            <span className="inline-flex h-[20px] rounded-full bg-[#EC1822] text-white text-[12px] leading-[16px] px-[8px] py-[2px]">
+              ХИТ
+            </span>
+          ) : null}
+
+          {product?.isNew ? (
+            <span className="inline-flex h-[20px] rounded-full bg-[#EC1822] text-white text-[12px] leading-[16px] px-[8px] py-[2px]">
+              NEW
+            </span>
+          ) : null}
+
+          {product?.isSale ? (
+            <span className="inline-flex h-[20px] rounded-full bg-[#EC1822] text-white text-[12px] leading-[16px] px-[8px] py-[2px]">
+              SALE
+            </span>
+          ) : null}
+        </div>
 
         {/* НАЗВАНИЕ — внутри <h3> и с clamp на 2 строки */}
         <h3
@@ -113,7 +163,7 @@ export default function ProductCard({ product }) {
         <div className="mt-auto pt-[8px] pb-[16px]">
           {/* цена */}
           <p className="text-[36px] font-bold mb-[1px] px-[8px] whitespace-nowrap ">
-            9999
+            {priceText}
           </p>
 
           {/* кнопки */}
@@ -124,10 +174,14 @@ export default function ProductCard({ product }) {
                 type="button"
                 onClick={async (e) => {
                   e.stopPropagation();
-                  if (!variantId || cartBusy) return;
+                  if (cartBusy) return;
+
+                  const vId = await ensureVariantId(); // <-- вот здесь используем
+                  if (!vId) return;
+
                   setCartBusy(true);
                   try {
-                    await api.setCartItem(variantId, 1);
+                    await api.setCartItem(vId, 1);
                     setQty(1);
                   } finally {
                     setCartBusy(false);
@@ -146,15 +200,19 @@ export default function ProductCard({ product }) {
                   type="button"
                   disabled={cartBusy}
                   onClick={async () => {
-                    if (!variantId || cartBusy) return;
+                    if (cartBusy) return;
+
+                    const vId = await ensureVariantId(); // <-- вот здесь
+                    if (!vId) return;
+
                     const next = qty - 1;
                     setCartBusy(true);
                     try {
                       if (next <= 0) {
-                        await api.deleteCartItem(variantId);
+                        await api.deleteCartItem(vId);
                         setQty(0);
                       } else {
-                        await api.setCartItem(variantId, next);
+                        await api.setCartItem(vId, next);
                         setQty(next);
                       }
                     } finally {
@@ -170,11 +228,15 @@ export default function ProductCard({ product }) {
                   type="button"
                   disabled={cartBusy}
                   onClick={async () => {
-                    if (!variantId || cartBusy) return;
+                    if (cartBusy) return;
+
+                    const vId = await ensureVariantId(); // <-- вот здесь
+                    if (!vId) return;
+
                     const next = qty + 1;
                     setCartBusy(true);
                     try {
-                      await api.setCartItem(variantId, next);
+                      await api.setCartItem(vId, next);
                       setQty(next);
                     } finally {
                       setCartBusy(false);
@@ -190,32 +252,55 @@ export default function ProductCard({ product }) {
             {/* ИЗБРАННОЕ — контур по умолчанию, заливка при клике */}
             <button
               type="button"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                setIsFavorite((v) => !v);
+
+                if (!authed) {
+                  navigate("/register");
+                  return;
+                }
+                if (!slug) return;
+
+                const next = !isFavorite;
+                setIsFavorite(next); // optimistic
+
+                let ok = false;
+                try {
+                  ok = next
+                    ? await api.addFavorite(slug)
+                    : await api.removeFavorite(slug);
+                } catch {
+                  ok = false;
+                }
+
+                if (!ok) {
+                  setIsFavorite(!next);
+                  return;
+                }
+
+                const set = getFavSet();
+                if (next) set.add(slug);
+                else set.delete(slug);
+                saveFavSet(set);
+
+                window.dispatchEvent(new Event("favorites:changed"));
               }}
               className="
-          group
-          w-[40px] h-[40px] mt-[5px]
-          rounded-[4px] bg-[#E5E5E5]
-          flex items-center justify-center
-          transition
-        "
+    group
+    w-[40px] h-[40px] mt-[5px]
+    rounded-[4px] bg-[#E5E5E5]
+    flex items-center justify-center
+    transition
+  "
               aria-label="Избранное"
             >
               <HeartIcon
                 className={[
-                  // сам размер иконки (30×26)
                   "w-[30px] h-[26px]",
-
-                  // По умолчанию — контур синим, пустая внутри:
-                  // (stroke берёт currentColor; fill убираем)
                   isFavorite
                     ? "text-[#EC1822] [&_*]:fill-current"
                     : "text-[#1C1A61] [&_*]:fill-transparent",
-                  // делаем обводку видимой и толстой
                   "[&_*]:stroke-current [&_*]:stroke-2",
-                  // на hover — красный контур (когда НЕ избранное)
                   !isFavorite ? "group-hover:text-[#EC1822]" : "",
                 ].join(" ")}
               />

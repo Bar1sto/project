@@ -60,12 +60,12 @@ export default function BigProductPage() {
         };
 
         setProduct(normalized);
-        setIsFavorite(!!data.is_favorite);
+        setIsFavorite(!!data.is_favorited);
 
         // сообщаем бэку, что товар просмотрен (redis/БД — на его стороне)
-        if (normalized.id) {
-          api.markProductViewed(normalized.id).catch(() => {});
-        }
+        // if (normalized.id) {
+        //   api.markProductViewed(normalized.id).catch(() => {});
+        // }
       } catch (err) {
         console.error("load product error", err);
         if (!alive) return;

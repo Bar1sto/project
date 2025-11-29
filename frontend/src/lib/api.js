@@ -1,77 +1,152 @@
-// src/lib/api.js
+// frontend/src/lib/api.js
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
-// хранение токена
+// ===== TOKEN =====
 const TOKEN_KEY = "access";
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || "";
+const REFRESH_KEY = "refresh";
+export function getRefresh() {
+  return localStorage.getItem(REFRESH_KEY) || "";
 }
+export function setRefresh(t) {
+  if (t) localStorage.setItem(REFRESH_KEY, t);
+  else localStorage.removeItem(REFRESH_KEY);
+}
+
+function isLikelyJwt(token) {
+  // jwt обычно aaa.bbb.ccc (base64url)
+  return (
+    typeof token === "string" &&
+    /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/.test(token)
+  );
+}
+
+export function getToken() {
+  const t = localStorage.getItem(TOKEN_KEY) || "";
+  return isLikelyJwt(t) ? t : "";
+}
+
 export function setToken(t) {
-  if (t) localStorage.setItem(TOKEN_KEY, t);
+  if (isLikelyJwt(t)) localStorage.setItem(TOKEN_KEY, t);
   else localStorage.removeItem(TOKEN_KEY);
 }
+
+// ===== ANON ID =====
+const ANON_KEY = "anon_id";
+function getAnonId() {
+  let v = localStorage.getItem(ANON_KEY);
+  if (!v) {
+    v =
+      globalThis.crypto?.randomUUID?.() ||
+      `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    localStorage.setItem(ANON_KEY, v);
+  }
+  return v;
+}
+
+function buildUrl(path) {
+  if (path.startsWith("ABS:")) return path.slice(4);
+  return API_BASE + path;
+}
+
+async function parseJsonSafe(res) {
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 export const api = {
   hasToken: () => !!getToken(),
 
-  // универсальный fetch БЕЗ cookies
   async _fetch(
     path,
     { method = "GET", headers = {}, body, isForm = false } = {}
   ) {
     const token = getToken();
-    const h = {
-      Accept: "application/json",
-      ...(isForm ? {} : { "Content-Type": "application/json" }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
+
+    const doFetch = async (withAuth) => {
+      const h = {
+        Accept: "application/json",
+        ...(isForm ? {} : { "Content-Type": "application/json" }),
+        "X-Anon-Id": getAnonId(),
+        ...(withAuth && token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      };
+      // const url = path.startsWith("ABS:") ? path.slice(4) : API_BASE + path;
+      const url = path.startsWith("/favorites") ? path : API_BASE + path;
+
+      const res = await fetch(url, {
+        method,
+        headers: h,
+        body: isForm ? body : body ? JSON.stringify(body) : undefined,
+        credentials: "omit",
+      });
+
+      const data = await parseJsonSafe(res);
+      return { ok: res.ok, status: res.status, data };
     };
-    const res = await fetch(API_BASE + path, {
-      method,
-      headers: h,
-      body: isForm ? body : body ? JSON.stringify(body) : undefined,
-      // КЛЮЧЕВОЕ: не отправляем куки, чтобы сессия админа не «перебивала» JWT
-      credentials: "omit",
-    });
-    const text = await res.text();
-    let json = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {}
-    return { ok: res.ok, status: res.status, data: json };
+
+    // пробуем с auth (если токен нормальный)
+    let r = await doFetch(true);
+
+    // если токен был, но он протух/битый — чистим и повторяем без auth
+    if (token && r.status === 401) {
+      // пробуем обновить access по refresh
+      const ok = await api.refreshToken();
+      if (ok) {
+        // повторяем запрос уже с новым access
+        r = await doFetch(true);
+      } else {
+        // не удалось — чистим токены и повторяем без auth
+        setToken("");
+        setRefresh("");
+        r = await doFetch(false);
+      }
+    }
+
+    return r;
   },
 
-  // ===== AUTH =====
   async login(payload) {
-    // 1) твой кастомный логин
-    let r = await api._fetch("/clients/login/", {
+    const r = await api._fetch("/clients/login/", {
       method: "POST",
       body: payload,
     });
-    // 2) fallback — simplejwt стандарт (если настроен)
-    if (!r.ok)
-      r = await api._fetch("/auth/jwt/create/", {
-        method: "POST",
-        body: payload,
-      });
-    // 3) fallback — dj-rest-auth (если есть)
-    if (!r.ok)
-      r = await api._fetch("/dj-rest-auth/login/", {
-        method: "POST",
-        body: payload,
-      });
+    if (!r.ok) return { ok: false, error: r.data, status: r.status };
+    if (r.data?.access) setToken(r.data.access);
+    if (r.data?.refresh) setRefresh(r.data.refresh);
+    return { ok: true, data: r.data };
+  },
 
-    if (!r.ok) return { ok: false, error: r.data };
+  async addFavorite(slug) {
+    const r = await api._fetch(`ABS:/favorites/${encodeURIComponent(slug)}/`, {
+      method: "PUT",
+    });
+    return r.ok;
+  },
 
-    // достаём access
-    const access =
-      r.data?.access ||
-      r.data?.token ||
-      r.data?.key ||
-      r.data?.data?.access ||
-      "";
+  async removeFavorite(slug) {
+    const r = await api._fetch(`ABS:/favorites/${encodeURIComponent(slug)}/`, {
+      method: "DELETE",
+    });
+    return r.ok;
+  },
+  async refreshToken() {
+    const refresh = getRefresh();
+    if (!refresh) return false;
 
-    if (access) setToken(access);
-    return { ok: true };
+    const r = await api._fetch("/clients/refresh/", {
+      method: "POST",
+      body: { refresh },
+    });
+
+    if (!r.ok || !r.data?.access) return false;
+    setToken(r.data.access);
+    if (r.data?.refresh) setRefresh(r.data.refresh); // если ротация
+    return true;
   },
 
   async register(payload) {
@@ -79,19 +154,8 @@ export const api = {
       method: "POST",
       body: payload,
     });
-
-    if (!r.ok) {
-      return { ok: false, error: r.data, status: r.status };
-    }
-
-    const access =
-      r.data?.access ||
-      r.data?.token ||
-      r.data?.key ||
-      r.data?.data?.access ||
-      "";
-    if (access) setToken(access);
-
+    if (!r.ok) return { ok: false, error: r.data, status: r.status };
+    if (r.data?.access) setToken(r.data.access);
     return { ok: true, data: r.data };
   },
 
@@ -99,143 +163,62 @@ export const api = {
     setToken("");
   },
 
-  // ===== PROFILE/FAVORITES/ORDERS =====
   async getMe() {
-    // добавил /clients/me/ как ты просил
-    const candidates = [
-      "/clients/me/",
-      "/customers/me/",
-      "/users/me/",
-      "/auth/user/",
-    ];
-    for (const p of candidates) {
-      const r = await api._fetch(p);
-      if (r.ok && r.data) return r.data;
-    }
+    const r = await api._fetch("/clients/me/");
+    if (r.ok && r.data) return r.data;
     throw new Error("me_not_found");
   },
 
-  async updateMe(patch) {
-    // пробуем PATCH на возможные варианты
-    const paths = ["/clients/me/", "/customers/me/", "/users/me/"];
-    for (const p of paths) {
-      const r = await api._fetch(p, { method: "PATCH", body: patch });
-      if (r.ok) return r.data || patch;
-    }
-    throw new Error("update_failed");
+  async getProducts(params = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === "") return;
+      qs.set(k, String(v));
+    });
+    const path = qs.toString() ? `/products/?${qs}` : "/products/";
+    const r = await api._fetch(path);
+    if (!r.ok) throw new Error(`products_${r.status}`);
+    return r.data;
   },
 
-  async uploadAvatar(file) {
-    const fd = new FormData();
-    // поле в сериализаторе — image
-    fd.append("image", file);
-
-    // наш реальный эндпоинт — /api/clients/me/
-    const paths = ["/clients/me/", "/customers/me/", "/users/me/"];
-
-    for (const p of paths) {
-      const r = await api._fetch(p, {
-        method: "PATCH",
-        isForm: true,
-        body: fd,
-      });
-
-      if (r.ok) {
-        return r.data?.image || r.data?.avatar || null;
-      }
-    }
-
-    throw new Error("avatar_upload_failed");
+  async getProduct(slug) {
+    const r = await api._fetch(`/products/${encodeURIComponent(slug)}/`);
+    if (r.ok && r.data) return r.data;
+    throw new Error("product_not_found");
   },
-
   async getFavorites() {
-    const paths = ["/products/favorites/", "/favorites/"];
-    for (const p of paths) {
-      const r = await api._fetch(p);
-      if (r.ok) return r.data?.results || r.data || [];
-    }
+    const r = await api._fetch("/favorites/");
+    if (r.ok) return r.data?.results || r.data || [];
     return [];
   },
 
-  async getOrders() {
-    const paths = ["/orders/", "/orders/history/"];
-    for (const p of paths) {
-      const r = await api._fetch(p);
-      if (r.ok) return r.data?.results || r.data || [];
-    }
-    return [];
-  },
-
-  async repeatOrder(orderId) {
-    const r = await api._fetch(`/orders/${orderId}/repeat/`, {
-      method: "POST",
+  async addFavorite(slug) {
+    const r = await api._fetch(`/favorites/${encodeURIComponent(slug)}/`, {
+      method: "PUT",
     });
     return r.ok;
   },
 
-  // ===== PRODUCTS =====
-  async getProduct(slugOrId) {
-    // пробуем разные варианты — под твой бек
-    const candidates = [
-      `/products/${slugOrId}/`,
-      `/products/slug/${slugOrId}/`,
-      `/products/${slugOrId}`, // на случай, если без слеша
-    ];
-    for (const p of candidates) {
-      const r = await api._fetch(p);
-      if (r.ok && r.data) return r.data;
-    }
-    throw new Error("product_not_found");
+  async removeFavorite(slug) {
+    const r = await api._fetch(`/favorites/${encodeURIComponent(slug)}/`, {
+      method: "DELETE",
+    });
+    return r.ok;
+  },
+  async setCartItem(variantId, qty) {
+    const r = await api._fetch("/orders/items/", {
+      method: "POST",
+      body: { variant_id: variantId, qty },
+    });
+    if (!r.ok) throw new Error(`cart_set_${r.status}`);
+    return r.data;
   },
 
-  // "просмотренные" — бек может внутри использовать Redis
-  async markProductViewed(productId) {
-    const payload = { product: productId };
-    const paths = [
-      "/products/viewed/",
-      "/products/recent/",
-      "/recently-viewed/",
-    ];
-    for (const p of paths) {
-      const r = await api._fetch(p, { method: "POST", body: payload });
-      if (r.ok) return true;
-    }
-    return false;
-  },
-
-  // избранное — бек может сложить это в Redis
-  async toggleFavorite(productId) {
-    const payload = { product: productId };
-    const paths = [
-      "/favorites/toggle/",
-      "/products/favorites/toggle/",
-      "/favorites/",
-    ];
-
-    for (const p of paths) {
-      const r = await api._fetch(p, { method: "POST", body: payload });
-      if (r.ok && r.data) {
-        // ожидаем { is_favorite: true/false } или подобное
-        return r.data.is_favorite ?? true;
-      }
-    }
-
-    // если на бэке ещё не сделано — просто возвращаем true
-    return true;
-  },
-
-  // корзина — бек может хранить корзину в Redis
-  async addToCart(productId, { quantity = 1, size = null } = {}) {
-    const payload = { product: productId, quantity };
-    if (size) payload.size = size;
-
-    const paths = ["/cart/items/", "/cart/add/", "/cart/"];
-    for (const p of paths) {
-      const r = await api._fetch(p, { method: "POST", body: payload });
-      if (r.ok) return r.data || true;
-    }
-    // fallback: можно хранить в localStorage, если очень надо
-    return false;
+  async deleteCartItem(variantId) {
+    const r = await api._fetch(`/orders/items/${variantId}/`, {
+      method: "DELETE",
+    });
+    return r.ok;
   },
 };
 
