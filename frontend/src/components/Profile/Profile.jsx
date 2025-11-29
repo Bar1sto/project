@@ -50,7 +50,8 @@ const EP = {
 async function firstOk(paths) {
   for (const p of paths) {
     try {
-      return await tryGet(API_BASE + p);
+      const url = p.startsWith("/favorites") ? p : API_BASE + p;
+      return await tryGet(url);
     } catch (_) {}
   }
   throw new Error("No endpoint worked");
@@ -66,6 +67,26 @@ export default function Profile() {
 
   const [activeTab, setActiveTab] = useState(null); // 'history' | 'favorites' | 'cert' | 'settings'
   const fileInputRef = useRef(null);
+  const favLoadingRef = useRef(false);
+  const reloadFavorites = async () => {
+    if (favLoadingRef.current) return;
+    favLoadingRef.current = true;
+
+    try {
+      const favs = await api.getFavorites();
+      const arr = Array.isArray(favs?.results)
+        ? favs.results
+        : Array.isArray(favs)
+        ? favs
+        : [];
+
+      setFavorites(arr.map(mapApiProduct));
+    } catch (e) {
+      console.warn("reloadFavorites failed:", e);
+    } finally {
+      favLoadingRef.current = false;
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -76,9 +97,8 @@ export default function Profile() {
         const haveToken = !!bearer();
 
         if (haveToken) {
-          const [u, fav, ord] = await Promise.allSettled([
+          const [u, ord] = await Promise.allSettled([
             firstOk(EP.me),
-            api.getFavorites(),
             firstOk(EP.orders),
           ]);
           if (!alive) return;
@@ -111,11 +131,12 @@ export default function Profile() {
 
           setMe(normalizedMe);
 
-          setFavorites(
-            fav.status === "fulfilled"
-              ? (fav.value || []).map(mapApiProduct)
-              : DEMO_FAVORITES.map(mapDemoProduct)
-          );
+          // setFavorites(
+          //   fav.status === "fulfilled"
+          //     ? (fav.value || []).map(mapApiProduct)
+          //     : DEMO_FAVORITES.map(mapDemoProduct)
+          // );
+          setFavorites([]);
           setOrders(
             ord.status === "fulfilled"
               ? ord.value.results || ord.value
@@ -139,22 +160,28 @@ export default function Profile() {
       }
     })();
 
-    const reloadFavorites = async () => {
-      try {
-        // ВАЖНО: берём избранное через api.getFavorites() (он ходит на /favorites/)
-        const favs = await api.getFavorites();
-        const arr = Array.isArray(favs?.results)
-          ? favs.results
-          : Array.isArray(favs)
-          ? favs
-          : [];
-        if (!alive) return;
-        setFavorites(arr.map(mapApiProduct));
-      } catch (e) {
-        if (!alive) return;
-        setFavorites([]);
-      }
-    };
+    // const reloadFavorites = async () => {
+    //  if (favLoadingRef.current) return;
+    //   favLoadingRef.current = true;
+
+    //   try {
+    //     const favs = await api.getFavorites();
+    //     const arr = Array.isArray(favs?.results)
+    //       ? favs.results
+    //       : Array.isArray(favs)
+    //       ? favs
+    //       : [];
+
+    //     if (!alive) return;
+
+    //     setFavorites(arr.map(mapApiProduct));
+    //   } catch (e) {
+    //     console.warn("reloadFavorites failed:", e);
+    //     // можно НЕ обнулять, чтобы при временной ошибке не пропадал UI
+    //   } finally {
+    //     favLoadingRef.current = false;
+    //   }
+    // };
 
     // 1) загрузили один раз при входе в профиль
     reloadFavorites();
@@ -168,6 +195,12 @@ export default function Profile() {
       window.removeEventListener("favorites:changed", onFavChanged);
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "favorites") {
+      reloadFavorites();
+    }
+  }, [activeTab]);
 
   const fullName = useMemo(() => {
     const last = me?.last_name || me?.surname || "";
@@ -580,15 +613,21 @@ const DEMO_ORDERS = [];
 const DEMO_FAVORITES = [];
 
 function mapApiProduct(p) {
+  const obj = p?.product ? p.product : p;
+
   return {
-    id: p.id,
-    slug: p.slug || p.slug_name || p.url_key || String(p.id),
-    name: p.name || p.title,
-    brand: p.brand_name || p.brand?.name,
-    price: p.price || p.current_price || 0,
-    image: p.image || p.images?.[0] || null,
-    is_new: p.is_new ?? false,
-    is_sale: p.is_sale ?? false,
+    id: obj.id,
+    slug: obj.slug,
+    name: obj.name || obj.title,
+    brand: obj.brand_name || obj.brand?.name,
+    price: obj.min_price ?? obj.price ?? obj.current_price ?? 0,
+    image: obj.image || obj.images?.[0] || null,
+
+    isNew: !!obj.is_new,
+    isSale: !!obj.is_sale,
+    isHit: !!(obj.is_hit ?? obj.is_Hit),
+
+    isFavorited: true,
   };
 }
 

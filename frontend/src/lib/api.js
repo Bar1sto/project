@@ -76,8 +76,11 @@ export const api = {
         ...headers,
       };
       // const url = path.startsWith("ABS:") ? path.slice(4) : API_BASE + path;
-      const url = path.startsWith("/favorites") ? path : API_BASE + path;
-
+      const url = path.startsWith("ABS:")
+        ? path.slice(4) // "ABS:/favorites/" -> "/favorites/"
+        : path.startsWith("/favorites")
+        ? path // на всякий
+        : API_BASE + path;
       const res = await fetch(url, {
         method,
         headers: h,
@@ -187,7 +190,7 @@ export const api = {
     throw new Error("product_not_found");
   },
   async getFavorites() {
-    const r = await api._fetch("/favorites/");
+    const r = await api._fetch("ABS:/favorites/");
     if (r.ok) return r.data?.results || r.data || [];
     return [];
   },

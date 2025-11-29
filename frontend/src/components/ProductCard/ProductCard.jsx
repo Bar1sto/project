@@ -21,7 +21,10 @@ function saveFavSet(set) {
 }
 export default function ProductCard({ product }) {
   const [isFavorite, setIsFavorite] = useState(!!product?.isFavorited);
-  const slug = product?.slug;
+  const slug =
+    product?.slug ||
+    product?.product?.slug || // на всякий, если вдруг где-то вложено
+    null;
   const goToProduct = () => {
     if (!slug) return;
     navigate(`/product/${encodeURIComponent(slug)}`);
@@ -68,22 +71,19 @@ export default function ProductCard({ product }) {
   useEffect(() => {
     if (!slug) return;
 
-    const fromApi = product?.isFavorited ?? product?.is_favorited;
-    if (typeof fromApi === "boolean") {
-      setIsFavorite(fromApi);
-
-      // синхронизируем localStorage под API (чтобы не было рассинхрона)
+    const syncFromStorage = () => {
       const set = getFavSet();
-      if (fromApi) set.add(slug);
-      else set.delete(slug);
-      saveFavSet(set);
-      return;
-    }
+      setIsFavorite(set.has(slug));
+    };
 
-    // fallback: только localStorage
-    const set = getFavSet();
-    setIsFavorite(set.has(slug));
-  }, [slug, product?.isFavorited, product?.is_favorited]);
+    // при монтировании читаем storage
+    syncFromStorage();
+
+    // и обновляемся по событию
+    window.addEventListener("favorites:changed", syncFromStorage);
+    return () =>
+      window.removeEventListener("favorites:changed", syncFromStorage);
+  }, [slug]);
 
   return (
     <article
@@ -278,6 +278,7 @@ export default function ProductCard({ product }) {
                   return;
                 }
 
+                // ✅ сохраняем в localStorage, чтобы после перезагрузки сердце не слетало
                 const set = getFavSet();
                 if (next) set.add(slug);
                 else set.delete(slug);
