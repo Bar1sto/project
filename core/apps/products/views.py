@@ -43,7 +43,26 @@ class ProductListView(ListAPIView):
     serializer_class = ProductListSerializer
 
     def get_queryset(self):
-        return get_products_list_qs(user=self.request.user)
+        qs = get_products_list_qs(user=self.request.user)
+        qs = qs.order_by("-id")
+        qp = self.request.query_params
+        def truthy(v):
+            return str(v).lower() in ("1", "true", "yes", "y", "on")
+        if truthy(qp.get("popular")) or truthy(qp.get("is_hit")):
+            qs = qs.filter(is_hit=True)
+
+        if truthy(qp.get("is_new")):
+            qs = qs.filter(is_new=True)
+
+        if truthy(qp.get("is_sale")):
+            qs = qs.filter(is_sale=True)
+        try:
+            limit = int(qp.get("limit")) if qp.get("limit") else None
+        except ValueError:
+            limit = None
+        if limit:
+            qs = qs[:limit]
+        return qs
 
 
 class ProductRetrieveView(RetrieveAPIView):

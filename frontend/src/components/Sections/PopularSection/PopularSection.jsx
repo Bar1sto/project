@@ -21,6 +21,8 @@ export default function PopularSection({ products = [] }) {
           : [];
 
         setItems(arr.map(mapToCardShape));
+        const cards = arr.map(mapToCardShape).filter((p) => p.isHit);
+        setItems(cards);
       } catch (e) {
         console.warn("PopularSection load error:", e);
       }

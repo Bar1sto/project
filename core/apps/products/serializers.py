@@ -80,9 +80,22 @@ class ProductListSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    category_path = serializers.SerializerMethodField()
+
+    def get_category_path(self, obj):
+        cat = getattr(obj, "category", None)
+        if not cat:
+            return None
+        names = []
+        while cat:
+            names.append(cat.name)
+            cat = getattr(cat, "parent", None)
+        return " - ".join(reversed(names))
+
     class Meta:
         model = Product
         fields = (
+            "id",
             "slug",
             "name",
             "price",
@@ -93,4 +106,5 @@ class ProductListSerializer(serializers.ModelSerializer):
             "is_new",
             "is_hit",
             "sale",
+            "category_path",
         )

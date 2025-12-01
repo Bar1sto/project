@@ -21,6 +21,8 @@ export default function NewProductsSection({ products = [] }) {
           : [];
 
         setItems(arr.map(mapToCardShape));
+        const cards = arr.map(mapToCardShape).filter((p) => p.isNew);
+        setItems(cards);
       } catch (e) {
         console.warn("NewProductsSection load error:", e);
       }

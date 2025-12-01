@@ -21,6 +21,8 @@ export default function SaleSection({ products = [] }) {
           : [];
 
         setItems(arr.map(mapToCardShape));
+        const cards = arr.map(mapToCardShape).filter((p) => p.isSale);
+        setItems(cards);
       } catch (e) {
         console.warn("SaleSection load error:", e);
       }

@@ -3,28 +3,54 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import Container from "../../components/ui/Container";
 import api from "../../lib/api";
+import HeartIcon from "../../assets/icons/heart.svg?react";
+import { useAuth } from "../../context/AuthContext";
 import { toAbsMedia } from "../../config/api";
 
 const STEP = 32;
 const NOTCH_W = 360 + 24;
 
+/** favorites persistence как в ProductCard */
+const FAV_LS_KEY = "fav_slugs";
+function getFavSet() {
+  try {
+    const raw = localStorage.getItem(FAV_LS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+function saveFavSet(set) {
+  localStorage.setItem(FAV_LS_KEY, JSON.stringify([...set]));
+}
+
 function formatPrice(v) {
   if (v == null) return "—";
   const num = Number(v);
-  if (Number.isNaN(num)) return String(v);
-  return num.toLocaleString("ru-RU") + " ₽";
+  if (!Number.isFinite(num)) return "—";
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 })
+    .format(num)
+    .replace(/\u00A0/g, " ");
 }
 
 export default function BigProductPage() {
   const { slug } = useParams(); // путь вида /product/:slug
   const navigate = useNavigate();
+  const { authed } = useAuth();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
-  const [selectedSize, setSelectedSize] = useState(null);
-  const [addingToCart, setAddingToCart] = useState(false);
+  // variants / sizes
+  const [selectedVariantId, setSelectedVariantId] = useState(null);
+
+  // cart qty (как в мини карточке)
+  const [qty, setQty] = useState(0);
+  const [cartBusy, setCartBusy] = useState(false);
+
+  // favorite
   const [isFavorite, setIsFavorite] = useState(false);
 
   useEffect(() => {
@@ -34,9 +60,6 @@ export default function BigProductPage() {
       try {
         setLoading(true);
         setLoadError(null);
-        if (!slug) {
-          throw new Error("no_slug");
-        }
 
         const data = await api.getProduct(slug);
 
@@ -44,28 +67,40 @@ export default function BigProductPage() {
 
         const normalized = {
           id: data.id,
-          slug: data.slug || slug,
+          slug: data.slug,
           name: data.name || data.title || "Товар",
           brand: data.brand_name || data.brand?.name || data.manufacturer || "",
+          // арт НЕ показываем (оставляю в данных, но в UI не выводим)
           sku: data.article || data.sku || data.code || "",
+          // fallback, если вообще нет variants
           in_stock:
-            data.in_stock ?? data.stock_available ?? data.quantity > 0 ?? true,
-          price: data.price || data.current_price || 0,
+            data.in_stock ??
+            data.stock_available ??
+            (typeof data.quantity === "number" ? data.quantity > 0 : true),
+          // базовая цена, если variant не выбран
+          price: data.min_price ?? data.price ?? data.current_price ?? 0,
           old_price: data.old_price || data.base_price || null,
           image: toAbsMedia(
             data.image || (data.images && data.images[0]) || ""
           ),
           description: data.description || data.full_description || "",
-          sizes: data.sizes || data.size_options || data.variations || [], // по бэку можно уточнить
+          variants: Array.isArray(data.variants) ? data.variants : [],
+          is_favorited: !!data.is_favorited,
         };
 
         setProduct(normalized);
-        setIsFavorite(!!data.is_favorited);
 
-        // сообщаем бэку, что товар просмотрен (redis/БД — на его стороне)
-        // if (normalized.id) {
-        //   api.markProductViewed(normalized.id).catch(() => {});
-        // }
+        // дефолтная выбранная вариация: первая active, иначе первая
+        const vars = normalized.variants;
+        const firstActive = vars.find((v) => !!v?.is_active);
+        setSelectedVariantId(firstActive?.id ?? vars[0]?.id ?? null);
+
+        // favorite: localStorage OR api flag
+        const favSet = getFavSet();
+        setIsFavorite(favSet.has(normalized.slug) || normalized.is_favorited);
+
+        // если меняешь размер — qty сбрасываем (у другого варианта другой айтем корзины)
+        setQty(0);
       } catch (err) {
         console.error("load product error", err);
         if (!alive) return;
@@ -80,48 +115,150 @@ export default function BigProductPage() {
     };
   }, [slug]);
 
-  const priceDisplay = useMemo(
-    () => (product ? formatPrice(product.price) : "—"),
-    [product]
-  );
+  const variants = useMemo(() => product?.variants || [], [product]);
 
   const sizes = useMemo(() => {
-    if (!product?.sizes || !product.sizes.length) {
-      // демо-набор на случай отсутствия размеров
-      return [];
+    // рисуем только варианты, у которых есть size_value
+    return variants
+      .filter((v) => (v?.size_value ?? "").trim().length > 0)
+      .map((v) => ({
+        id: v.id,
+        label: v.size_value,
+        isActive: !!v.is_active,
+        price: v.current_price ?? v.price ?? null,
+      }));
+  }, [variants]);
+
+  const selectedVariant = useMemo(() => {
+    if (!selectedVariantId) return null;
+    return variants.find((v) => v?.id === selectedVariantId) || null;
+  }, [variants, selectedVariantId]);
+
+  // наличие: если есть размеры — по выбранному variant; если нет — fallback на product.in_stock
+  const inStock = useMemo(() => {
+    if (!product) return false;
+    if (sizes.length) return !!selectedVariant?.is_active;
+    return !!product.in_stock;
+  }, [product, sizes.length, selectedVariant]);
+
+  // цена: зависит от выбранного варианта
+  const priceDisplay = useMemo(() => {
+    if (!product) return "—";
+
+    if (sizes.length && selectedVariant) {
+      const vPrice =
+        selectedVariant.current_price ??
+        selectedVariant.price ??
+        selectedVariant.min_price ??
+        null;
+      return formatPrice(vPrice);
     }
-    return product.sizes;
-  }, [product]);
+
+    return formatPrice(product.price);
+  }, [product, sizes.length, selectedVariant]);
+
+  const canAddToCart = useMemo(() => {
+    if (!product) return false;
+    if (cartBusy) return false;
+    if (sizes.length) {
+      if (!selectedVariant?.id) return false;
+      if (!selectedVariant?.is_active) return false;
+    }
+    return true;
+  }, [product, cartBusy, sizes.length, selectedVariant]);
+
+  const ensureVariantId = () => {
+    // у нас для корзины нужен variant.id
+    return selectedVariant?.id ?? null;
+  };
 
   const onAddToCart = async () => {
-    if (!product) return;
-    setAddingToCart(true);
+    if (!canAddToCart) return;
+
+    const vId = ensureVariantId();
+    if (!vId) return;
+
+    setCartBusy(true);
     try {
-      await api.addToCart(product.id, {
-        quantity: 1,
-        size: selectedSize,
-      });
-      // можно всплывающее уведомление или переход в корзину
-      // navigate("/cart");
-    } catch (e) {
-      console.error("addToCart error", e);
+      await api.setCartItem(vId, 1);
+      setQty(1);
     } finally {
-      setAddingToCart(false);
+      setCartBusy(false);
+    }
+  };
+
+  const onDec = async () => {
+    if (cartBusy) return;
+
+    const vId = ensureVariantId();
+    if (!vId) return;
+
+    const next = qty - 1;
+
+    setCartBusy(true);
+    try {
+      if (next <= 0) {
+        await api.deleteCartItem(vId);
+        setQty(0);
+      } else {
+        await api.setCartItem(vId, next);
+        setQty(next);
+      }
+    } finally {
+      setCartBusy(false);
+    }
+  };
+
+  const onInc = async () => {
+    if (cartBusy) return;
+
+    const vId = ensureVariantId();
+    if (!vId) return;
+
+    const next = qty + 1;
+
+    setCartBusy(true);
+    try {
+      await api.setCartItem(vId, next);
+      setQty(next);
+    } finally {
+      setCartBusy(false);
     }
   };
 
   const onToggleFavorite = async () => {
-    if (!product) return;
-    try {
-      const fav = await api.toggleFavorite(product.id);
-      setIsFavorite(fav);
-    } catch (e) {
-      console.error("toggleFavorite error", e);
-    }
-  };
+    if (!product?.slug) return;
 
-  const canAddToCart =
-    !!product && (!sizes.length || !!selectedSize) && !addingToCart;
+    if (!authed) {
+      navigate("/register");
+      return;
+    }
+
+    const slugKey = product.slug;
+    const next = !isFavorite;
+    setIsFavorite(next); // optimistic
+
+    let ok = false;
+    try {
+      ok = next
+        ? await api.addFavorite(slugKey)
+        : await api.removeFavorite(slugKey);
+    } catch (e) {
+      ok = false;
+    }
+
+    if (!ok) {
+      setIsFavorite(!next);
+      return;
+    }
+
+    const set = getFavSet();
+    if (next) set.add(slugKey);
+    else set.delete(slugKey);
+    saveFavSet(set);
+
+    window.dispatchEvent(new Event("favorites:changed"));
+  };
 
   return (
     <Container className="font-[Actay] text-[#1C1A61]">
@@ -138,22 +275,17 @@ export default function BigProductPage() {
         <span>{product?.name || "Товар"}</span>
       </div>
 
-      {/* Заголовок */}
-      <h1 className="text-[42px] sm:text-[56px] font-extrabold mb-6 leading-tight">
-        {product?.name || (loading ? "Загрузка…" : "Товар")}
-      </h1>
-
       {/* Верхняя фигура — три блока как у профиля */}
       <section className="relative mb-12 isolate">
         <div className="grid grid-cols-1 md:grid-cols-[360px,1fr] md:grid-rows-[auto,auto] gap-x-6 gap-y-6 md:gap-y-0">
           {/* Фото */}
           <div className="md:col-start-1 md:row-start-1 relative z-10 mb-6 md:mb-0">
-            <div className="bg-[#E5E5E5] rounded-[14px] p-5 shadow-sm">
+            <div className="bg-[#E5E5E5] rounded-[14px] p-5 pb-10 shadow-sm">
               <div className="relative w-full aspect-square rounded-[14px] border border-[#1C1A61] bg-[#F3F3F3] overflow-hidden flex items-center justify-center">
-                {product?.image && !loading ? (
+                {product?.image ? (
                   <img
                     src={product.image}
-                    alt={product.name}
+                    alt={product?.name || "Фото"}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 ) : (
@@ -166,8 +298,7 @@ export default function BigProductPage() {
           </div>
 
           {/* Инфо */}
-
-          <div className="md:col-start-2 md:row-start-1 bg-[#E5E5E5] rounded-t-[14px] rounded-b-none p-6">
+          <div className="md:col-start-2 md:row-start-1 bg-[#E5E5E5] rounded-t-[14px] rounded-b-none p-6 pb-10">
             {loading ? (
               <div className="animate-pulse space-y-4">
                 <div className="h-7 w-3/4 bg-[#1C1A61]/10 rounded" />
@@ -182,7 +313,8 @@ export default function BigProductPage() {
                 <>
                   {/* Название + бренд */}
                   <div className="mb-4">
-                    <div className="text-[24px] sm:text-[28px] font-extrabold">
+                    {/* ✅ 40px как ты просил */}
+                    <div className="text-[40px] font-extrabold leading-tight">
                       {product.name}
                     </div>
                     {product.brand && (
@@ -190,44 +322,47 @@ export default function BigProductPage() {
                     )}
                   </div>
 
-                  {/* Артикул / наличие */}
+                  {/* ✅ Арт. не показываем. Только наличие */}
                   <div className="flex flex-col gap-3 mb-4 text-[16px]">
-                    {product.sku && <div>Артикул: {product.sku}</div>}
                     <div>
-                      <span className="inline-flex items-center px-3 py-1 border border-[#1C1A61] rounded-full text-[14px] font-medium">
-                        {product.in_stock ? "В наличии" : "Нет в наличии"}
+                      <span className="inline-flex items-center px-4 py-2 border border-[#1C1A61] rounded-full text-[14px] font-medium">
+                        {inStock ? "В наличии" : "Нет в наличии"}
                       </span>
                     </div>
                   </div>
 
-                  {/* Размеры */}
+                  {/* ✅ Размеры — как в фигме, значения из variants */}
                   {sizes.length > 0 && (
                     <div className="mb-6">
                       <div className="text-[16px] mb-2">Выберите размер</div>
+
                       <div className="inline-flex rounded-[10px] overflow-hidden border border-[#1C1A61]">
                         {sizes.map((sz) => {
-                          const key =
-                            typeof sz === "string"
-                              ? sz
-                              : sz.value || sz.label || sz.id;
-                          const label =
-                            typeof sz === "string"
-                              ? sz
-                              : sz.label || sz.title || sz.name || key;
-                          const isActive = selectedSize === key;
+                          const isSelected = selectedVariantId === sz.id;
+                          const disabled = !sz.isActive;
+
                           return (
                             <button
-                              key={key}
+                              key={sz.id}
                               type="button"
-                              onClick={() => setSelectedSize(key)}
+                              disabled={disabled}
+                              onClick={() => {
+                                setSelectedVariantId(sz.id);
+                                setQty(0);
+                              }}
                               className={[
-                                "px-4 py-2 text-[15px] font-medium border-r border-[#1C1A61]/60 last:border-r-0",
-                                isActive
+                                // ✅ размеры в один ряд, не друг под другом
+                                "w-[70px] h-[44px] text-[24px] font-medium",
+                                "border-r border-[#1C1A61]/60 last:border-r-0",
+                                isSelected
                                   ? "bg-[#1C1A61] text-white"
-                                  : "bg-white text-[#1C1A61] hover:bg-[#1C1A61]/5",
+                                  : "bg-white text-[#1C1A61]",
+                                disabled
+                                  ? "opacity-40 cursor-not-allowed"
+                                  : "hover:bg-[#1C1A61]/5",
                               ].join(" ")}
                             >
-                              {label}
+                              {sz.label}
                             </button>
                           );
                         })}
@@ -249,27 +384,62 @@ export default function BigProductPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-4">
-                      <button
-                        type="button"
-                        disabled={!canAddToCart}
-                        onClick={onAddToCart}
-                        className={[
-                          "rounded-[10px] px-6 py-2 text-[18px] font-semibold transition-colors",
-                          canAddToCart
-                            ? "bg-[#1C1A61] text-white hover:bg-[#EC1822]"
-                            : "bg-[#1C1A61]/40 text-white/70 cursor-not-allowed",
-                        ].join(" ")}
-                      >
-                        {addingToCart ? "Добавляем..." : "Добавить в корзину"}
-                      </button>
+                      {/* ✅ В корзину -> - qty + как на мини-карте */}
+                      {qty <= 0 ? (
+                        <button
+                          type="button"
+                          disabled={!canAddToCart}
+                          onClick={onAddToCart}
+                          className={[
+                            "rounded-[10px] px-6 py-2 text-[18px] font-semibold transition-colors",
+                            canAddToCart
+                              ? "bg-[#1C1A61] text-white hover:bg-[#EC1822]"
+                              : "bg-[#1C1A61]/40 text-white/70 cursor-not-allowed",
+                          ].join(" ")}
+                        >
+                          В корзину
+                        </button>
+                      ) : (
+                        <div
+                          className="rounded-[10px] px-4 py-2 bg-[#1C1A61] text-white flex items-center justify-between gap-4 text-[18px] font-semibold"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            disabled={cartBusy}
+                            onClick={onDec}
+                            className="w-8 h-8 rounded-md hover:bg-white/10"
+                          >
+                            –
+                          </button>
+                          <span className="min-w-6 text-center">{qty}</span>
+                          <button
+                            type="button"
+                            disabled={cartBusy}
+                            onClick={onInc}
+                            className="w-8 h-8 rounded-md hover:bg-white/10"
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
 
+                      {/* ✅ Избранное — сердце */}
                       <button
                         type="button"
                         onClick={onToggleFavorite}
-                        className="w-10 h-10 rounded-full border border-[#1C1A61]/40 flex items-center justify-center hover:border-[#EC1822] hover:text-[#EC1822] transition"
+                        className="w-10 h-10 rounded-full flex items-center justify-center hover:border-[#EC1822] transition"
                         aria-label="Избранное"
                       >
-                        {isFavorite ? "★" : "☆"}
+                        <HeartIcon
+                          className={[
+                            "w-[26px] h-[22px]",
+                            isFavorite
+                              ? "text-[#EC1822] [&_*]:fill-current"
+                              : "text-[#1C1A61] [&_*]:fill-transparent",
+                            "[&_*]:stroke-current [&_*]:stroke-2",
+                          ].join(" ")}
+                        />
                       </button>
                     </div>
                   </div>
@@ -279,8 +449,7 @@ export default function BigProductPage() {
           </div>
 
           {/* Нижний блок — описание, на всю ширину, с вырезом слева (как у профиля) */}
-
-          <div className="relative md:col-span-2 md:row-start-2 bg-[#E5E5E5] rounded-[14px] rounded-tr-none p-6">
+          <div className="relative md:col-span-2 md:row-start-2 mt bg-[#E5E5E5] rounded-[14px] rounded-tr-none px-6 pb-6 pt-10">
             {/* вырез-ступенька слева */}
             <div
               className="hidden md:block absolute z-0 left-0 bg-white rounded-bl-[14px] pointer-events-none"
@@ -295,13 +464,8 @@ export default function BigProductPage() {
               <h2 className="text-[24px] sm:text-[30px] font-extrabold mb-4">
                 Описание
               </h2>
-              {loading ? (
-                <div className="space-y-2 animate-pulse">
-                  <div className="h-4 w-full bg-[#1C1A61]/10 rounded" />
-                  <div className="h-4 w-5/6 bg-[#1C1A61]/10 rounded" />
-                  <div className="h-4 w-4/6 bg-[#1C1A61]/10 rounded" />
-                </div>
-              ) : product?.description ? (
+
+              {product?.description ? (
                 <div className="text-[16px] leading-relaxed whitespace-pre-line">
                   {product.description}
                 </div>
@@ -310,6 +474,9 @@ export default function BigProductPage() {
                   Описание будет добавлено позже.
                 </div>
               )}
+
+              {/* История просмотра — пока заглушка (как ты просил) */}
+              {/* <div className="mt-10 text-[20px] font-extrabold">История просмотров (в разработке)</div> */}
             </div>
           </div>
         </div>

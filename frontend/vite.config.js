@@ -11,6 +11,8 @@ export default defineConfig({
         target: "http://127.0.0.1:8000",
         changeOrigin: true,
         secure: false,
+        rewrite: (path) =>
+          path.replace(/^\/api\/favorites(?=\/|$)/, "/favorites"),
       },
       "/media": {
         target: "http://127.0.0.1:8000",
@@ -18,13 +20,9 @@ export default defineConfig({
         secure: false,
       },
       "/admin": {
-        target: "http://127.0.0.1:8000/admin",
-        changeOrigin: true,
-        secure: false,
-      },
-      "/favorites": {
         target: "http://127.0.0.1:8000",
         changeOrigin: true,
+        secure: false,
       },
     },
   },
