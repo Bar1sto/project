@@ -214,12 +214,19 @@ export const api = {
   },
 
   // ===== CART =====
+  async getCart() {
+    const r = await api._fetch("/orders/");
+    if (!r.ok) throw new Error("cart_get_" + r.status);
+    return r.data || { items: [], total: "0.00" };
+  },
+
   async setCartItem(variantId, qty) {
     const r = await api._fetch("/orders/items/", {
       method: "POST",
       body: { variant_id: variantId, qty },
     });
     if (!r.ok) throw new Error(`cart_set_${r.status}`);
+    window.dispatchEvent(new CustomEvent("cart:changed")); // ✅
     return r.data;
   },
 
@@ -227,6 +234,7 @@ export const api = {
     const r = await api._fetch(`/orders/items/${variantId}/`, {
       method: "DELETE",
     });
+    if (r.ok) window.dispatchEvent(new CustomEvent("cart:changed")); // ✅
     return r.ok;
   },
 };

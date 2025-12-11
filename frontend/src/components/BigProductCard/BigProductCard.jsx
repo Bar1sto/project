@@ -1,5 +1,4 @@
-// src/pages/BigProductPage/BigProductPage.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import Container from "../../components/ui/Container";
 import api from "../../lib/api";
@@ -39,6 +38,7 @@ export default function BigProductPage() {
   const navigate = useNavigate();
   const { authed } = useAuth();
 
+  // ====== states (ВАЖНО: объявлены ДО использования) ======
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -46,75 +46,16 @@ export default function BigProductPage() {
   // variants / sizes
   const [selectedVariantId, setSelectedVariantId] = useState(null);
 
-  // cart qty (как в мини карточке)
+  // qty for current selected variant (локальный, синхронизируем из корзины)
   const [qty, setQty] = useState(0);
+
+  // cart busy
   const [cartBusy, setCartBusy] = useState(false);
 
   // favorite
   const [isFavorite, setIsFavorite] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        setLoading(true);
-        setLoadError(null);
-
-        const data = await api.getProduct(slug);
-
-        if (!alive) return;
-
-        const normalized = {
-          id: data.id,
-          slug: data.slug,
-          name: data.name || data.title || "Товар",
-          brand: data.brand_name || data.brand?.name || data.manufacturer || "",
-          // арт НЕ показываем (оставляю в данных, но в UI не выводим)
-          sku: data.article || data.sku || data.code || "",
-          // fallback, если вообще нет variants
-          in_stock:
-            data.in_stock ??
-            data.stock_available ??
-            (typeof data.quantity === "number" ? data.quantity > 0 : true),
-          // базовая цена, если variant не выбран
-          price: data.min_price ?? data.price ?? data.current_price ?? 0,
-          old_price: data.old_price || data.base_price || null,
-          image: toAbsMedia(
-            data.image || (data.images && data.images[0]) || ""
-          ),
-          description: data.description || data.full_description || "",
-          variants: Array.isArray(data.variants) ? data.variants : [],
-          is_favorited: !!data.is_favorited,
-        };
-
-        setProduct(normalized);
-
-        // дефолтная выбранная вариация: первая active, иначе первая
-        const vars = normalized.variants;
-        const firstActive = vars.find((v) => !!v?.is_active);
-        setSelectedVariantId(firstActive?.id ?? vars[0]?.id ?? null);
-
-        // favorite: localStorage OR api flag
-        const favSet = getFavSet();
-        setIsFavorite(favSet.has(normalized.slug) || normalized.is_favorited);
-
-        // если меняешь размер — qty сбрасываем (у другого варианта другой айтем корзины)
-        setQty(0);
-      } catch (err) {
-        console.error("load product error", err);
-        if (!alive) return;
-        setLoadError("Не удалось загрузить товар");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [slug]);
-
+  // ====== helpers ======
   const variants = useMemo(() => product?.variants || [], [product]);
 
   const sizes = useMemo(() => {
@@ -172,16 +113,113 @@ export default function BigProductPage() {
     return selectedVariant?.id ?? null;
   };
 
+  // ====== sync qty from server cart (единый источник истины) ======
+  const syncQtyFromCart = useCallback(async (variantId) => {
+    if (!variantId) return;
+    try {
+      const cart = await api.getCart();
+      const found = (cart?.items || []).find(
+        (x) => Number(x.variant_id) === Number(variantId)
+      );
+      setQty(found ? Number(found.qty) : 0);
+    } catch {
+      // если корзина недоступна — не падаем
+    }
+  }, []);
+
+  // ====== load product ======
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        setLoading(true);
+        setLoadError(null);
+
+        const data = await api.getProduct(slug);
+        if (!alive) return;
+
+        const normalized = {
+          id: data.id,
+          slug: data.slug,
+          name: data.name || data.title || "Товар",
+          brand: data.brand_name || data.brand?.name || data.manufacturer || "",
+          // арт НЕ показываем (оставляю в данных, но в UI не выводим)
+          sku: data.article || data.sku || data.code || "",
+          // fallback, если вообще нет variants
+          in_stock:
+            data.in_stock ??
+            data.stock_available ??
+            (typeof data.quantity === "number" ? data.quantity > 0 : true),
+          // базовая цена, если variant не выбран
+          price: data.min_price ?? data.price ?? data.current_price ?? 0,
+          old_price: data.old_price || data.base_price || null,
+          image: toAbsMedia(
+            data.image || (data.images && data.images[0]) || ""
+          ),
+          description: data.description || data.full_description || "",
+          variants: Array.isArray(data.variants) ? data.variants : [],
+          is_favorited: !!data.is_favorited,
+        };
+
+        setProduct(normalized);
+
+        // дефолтная выбранная вариация: первая active, иначе первая
+        const vars = normalized.variants;
+        const firstActive = vars.find((v) => !!v?.is_active);
+        const nextVariantId = firstActive?.id ?? vars[0]?.id ?? null;
+        setSelectedVariantId(nextVariantId);
+
+        // favorite: localStorage OR api flag
+        const favSet = getFavSet();
+        setIsFavorite(favSet.has(normalized.slug) || normalized.is_favorited);
+
+        // ВАЖНО: qty НЕ сбрасываем принудительно здесь.
+        // qty синхронизируется отдельным эффектом по selectedVariantId.
+      } catch (err) {
+        console.error("load product error", err);
+        if (!alive) return;
+        setLoadError("Не удалось загрузить товар");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [slug]);
+
+  // когда поменялся selectedVariantId — подтянуть qty из корзины
+  useEffect(() => {
+    if (!selectedVariantId) return;
+    syncQtyFromCart(selectedVariantId);
+  }, [selectedVariantId, syncQtyFromCart]);
+
+  // когда корзина изменилась где-то ещё — обновить qty для текущего варианта
+  useEffect(() => {
+    const onChanged = () => {
+      if (!selectedVariantId) return;
+      syncQtyFromCart(selectedVariantId);
+    };
+    window.addEventListener("cart:changed", onChanged);
+    return () => window.removeEventListener("cart:changed", onChanged);
+  }, [selectedVariantId, syncQtyFromCart]);
+
+  // ====== cart actions ======
   const onAddToCart = async () => {
-    if (!canAddToCart) return;
+    if (cartBusy) return;
 
     const vId = ensureVariantId();
     if (!vId) return;
 
+    const safeQty = Math.max(1, Number(qty) || 1);
+
     setCartBusy(true);
     try {
-      await api.setCartItem(vId, 1);
-      setQty(1);
+      await api.setCartItem(vId, safeQty);
+      // qty подтянется через cart:changed, но для мгновенного UI можно обновить сразу:
+      setQty(safeQty);
     } finally {
       setCartBusy(false);
     }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import HeartIcon from "../../assets/icons/heart.svg?react";
 import api from "../../lib/api";
@@ -19,21 +19,27 @@ function getFavSet() {
 function saveFavSet(set) {
   localStorage.setItem(FAV_LS_KEY, JSON.stringify([...set]));
 }
+
 export default function ProductCard({ product }) {
+  const navigate = useNavigate();
+  const { authed } = useAuth();
+
   const [isFavorite, setIsFavorite] = useState(!!product?.isFavorited);
-  const slug =
-    product?.slug ||
-    product?.product?.slug || // на всякий, если вдруг где-то вложено
-    null;
+
+  const slug = product?.slug || product?.product?.slug || null;
+
   const goToProduct = () => {
     if (!slug) return;
     navigate(`/product/${encodeURIComponent(slug)}`);
   };
-  const navigate = useNavigate();
-  const { authed } = useAuth();
-  const [qty, setQty] = useState(0);
+
+  // ✅ qty теперь отображаем из корзины ПО SLUG (так не нужен variantId для отображения)
+  const [qty, setQtyLocal] = useState(0);
+
+  // variantId нужен только для действий (+/-/add)
   const [variantId, setVariantId] = useState(null);
   const [cartBusy, setCartBusy] = useState(false);
+
   const priceText =
     product?.price === null || product?.price === undefined
       ? "—"
@@ -41,33 +47,56 @@ export default function ProductCard({ product }) {
           .format(Number(product.price))
           .replace(/\u00A0/g, " ");
 
-  const formatPrice = (n) =>
-    new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 })
-      .format(n)
-      .replace(/\u00A0/g, " ");
+  // если бэк иногда отдаёт дефолтный variant — используем, но НЕ обязателен для отображения qty
+  const defaultVariantId = useMemo(() => {
+    const v =
+      product?.default_variant_id ??
+      product?.variant_id ??
+      product?.first_variant_id ??
+      null;
+    return v ? Number(v) : null;
+  }, [product]);
 
-  const priceValue =
-    product?.price === null ||
-    product?.price === undefined ||
-    product?.price === ""
-      ? null
-      : Number(product.price);
+  // ✅ синхронизируем qty по slug из корзины
+  const syncQtyFromCartBySlug = useCallback(async () => {
+    if (!slug) return;
+    try {
+      const cart = await api.getCart();
+      const items = cart?.items || [];
 
-  async function ensureVariantId() {
+      // суммируем qty всех позиций этого товара (на случай если в корзине 2 размера)
+      let sum = 0;
+      for (const it of items) {
+        const itSlug = it?.product?.slug || it?.product_slug || null;
+        if (itSlug && itSlug === slug) {
+          sum += Number(it.qty) || 0;
+        }
+      }
+      setQtyLocal(sum);
+    } catch {
+      // если не смогли загрузить — просто не падаем
+    }
+  }, [slug]);
+
+  // получить variantId для изменений (default -> cache -> detail)
+  const ensureVariantId = useCallback(async () => {
+    if (defaultVariantId) return defaultVariantId;
     if (variantId) return variantId;
     if (!slug) return null;
 
     try {
       const detail = await api.getProduct(slug);
-      const first = (detail?.variants || [])[0];
-      const id = first?.id ?? null;
+      const vars = Array.isArray(detail?.variants) ? detail.variants : [];
+      const firstActive = vars.find((v) => !!v?.is_active) || vars[0];
+      const id = firstActive?.id ? Number(firstActive.id) : null;
       setVariantId(id);
       return id;
     } catch {
       return null;
     }
-  }
-  console.log(product?.slug, product?.isFavorited, product?.is_favorited);
+  }, [defaultVariantId, variantId, slug]);
+
+  // избранное
   useEffect(() => {
     if (!slug) return;
 
@@ -76,14 +105,23 @@ export default function ProductCard({ product }) {
       setIsFavorite(set.has(slug));
     };
 
-    // при монтировании читаем storage
     syncFromStorage();
-
-    // и обновляемся по событию
     window.addEventListener("favorites:changed", syncFromStorage);
     return () =>
       window.removeEventListener("favorites:changed", syncFromStorage);
   }, [slug]);
+
+  // ✅ при монтировании подтягиваем qty из корзины
+  useEffect(() => {
+    syncQtyFromCartBySlug();
+  }, [syncQtyFromCartBySlug]);
+
+  // ✅ при изменениях корзины обновляем qty
+  useEffect(() => {
+    const onChanged = () => syncQtyFromCartBySlug();
+    window.addEventListener("cart:changed", onChanged);
+    return () => window.removeEventListener("cart:changed", onChanged);
+  }, [syncQtyFromCartBySlug]);
 
   return (
     <article
@@ -176,13 +214,14 @@ export default function ProductCard({ product }) {
                   e.stopPropagation();
                   if (cartBusy) return;
 
-                  const vId = await ensureVariantId(); // <-- вот здесь используем
+                  const vId = await ensureVariantId();
                   if (!vId) return;
 
                   setCartBusy(true);
                   try {
                     await api.setCartItem(vId, 1);
-                    setQty(1);
+                    // обновим qty через корзину (истина = сервер)
+                    window.dispatchEvent(new CustomEvent("cart:changed"));
                   } finally {
                     setCartBusy(false);
                   }
@@ -202,19 +241,19 @@ export default function ProductCard({ product }) {
                   onClick={async () => {
                     if (cartBusy) return;
 
-                    const vId = await ensureVariantId(); // <-- вот здесь
+                    const vId = await ensureVariantId();
                     if (!vId) return;
 
                     const next = qty - 1;
+
                     setCartBusy(true);
                     try {
                       if (next <= 0) {
                         await api.deleteCartItem(vId);
-                        setQty(0);
                       } else {
                         await api.setCartItem(vId, next);
-                        setQty(next);
                       }
+                      window.dispatchEvent(new CustomEvent("cart:changed"));
                     } finally {
                       setCartBusy(false);
                     }
@@ -230,14 +269,15 @@ export default function ProductCard({ product }) {
                   onClick={async () => {
                     if (cartBusy) return;
 
-                    const vId = await ensureVariantId(); // <-- вот здесь
+                    const vId = await ensureVariantId();
                     if (!vId) return;
 
                     const next = qty + 1;
+
                     setCartBusy(true);
                     try {
                       await api.setCartItem(vId, next);
-                      setQty(next);
+                      window.dispatchEvent(new CustomEvent("cart:changed"));
                     } finally {
                       setCartBusy(false);
                     }
@@ -278,7 +318,6 @@ export default function ProductCard({ product }) {
                   return;
                 }
 
-                // ✅ сохраняем в localStorage, чтобы после перезагрузки сердце не слетало
                 const set = getFavSet();
                 if (next) set.add(slug);
                 else set.delete(slug);

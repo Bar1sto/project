@@ -81,6 +81,27 @@ class ProductListSerializer(serializers.ModelSerializer):
     )
 
     category_path = serializers.SerializerMethodField()
+    sizes = serializers.SerializerMethodField()
+
+    default_variant_id = serializers.SerializerMethodField()
+
+    def get_default_variant_id(self, obj):
+        vs = getattr(obj, "variants", None)
+        if not vs:
+            return None
+        # первый активный вариант (можно усложнить по наличию/цене)
+        v = vs.filter(is_active=True).first()
+        return v.id if v else None
+
+    def get_sizes(self, obj):
+        vs = getattr(obj, "variants", None)
+        if vs is None:
+            return []
+        vals = []
+        for v in vs.all():
+            if getattr(v, "size_value", None):
+                vals.append(v.size_value)
+        return sorted(set(vals), key=lambda x: str(x))
 
     def get_category_path(self, obj):
         cat = getattr(obj, "category", None)
@@ -107,4 +128,6 @@ class ProductListSerializer(serializers.ModelSerializer):
             "is_hit",
             "sale",
             "category_path",
+            "sizes",
+            "default_variant_id",
         )

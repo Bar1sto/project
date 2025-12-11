@@ -1,4 +1,5 @@
 from apps.products.models import (
+    Category,
     Product,
 )
 from apps.products.selectors import (
@@ -19,6 +20,9 @@ from apps.products.services import (
     products_preserve_order,
 )
 from django.conf import settings
+from django.db import models
+from django.db.models import Q
+from django.utils.text import slugify
 from rest_framework import status
 from rest_framework.authentication import (
     SessionAuthentication,
@@ -46,8 +50,82 @@ class ProductListView(ListAPIView):
         qs = get_products_list_qs(user=self.request.user)
         qs = qs.order_by("-id")
         qp = self.request.query_params
+
         def truthy(v):
             return str(v).lower() in ("1", "true", "yes", "y", "on")
+
+        # ----- ПАРАМЕТРЫ -----
+        cat = (qp.get("category") or "").strip()
+        group = (qp.get("group") or qp.get("parent") or "").strip()
+
+        # ----- ФИЛЬТР ПО КАТЕГОРИЯМ -----
+        # грубый стеммер для русского: срезаем финальные гласные/мягкий знак
+        def russian_stem(s: str) -> str:
+            s = (s or "").strip().lower()
+            while s and s[-1] in "аиыоуэеёюяйь":
+                s = s[:-1]
+            return s
+
+        def make_name_q(name: str):
+            """
+            Строим Q для Category.name:
+            - точное совпадение (iexact)
+            - подстрока (icontains)
+            - startswith по стемму, чтобы "Клюшки" поймало "Клюшка" и наоборот
+            """
+            if not name:
+                return None
+            name_l = name.lower()
+            stem = russian_stem(name)
+
+            q = Q(name__iexact=name) | Q(name__icontains=name)
+            if stem and stem != name_l:
+                q |= Q(name__istartswith=stem)
+            return q
+
+        cat_q = make_name_q(cat)
+        grp_q = make_name_q(group)
+
+        if cat_q or grp_q:
+            # найдём набор категорий, по которым будем фильтровать товары
+            cats = Category.objects.none()
+
+            if cat_q and grp_q:
+                # сначала ищем детей выбранного родителя
+                parents = Category.objects.filter(grp_q)
+                cats = Category.objects.filter(cat_q, parent__in=parents)
+
+                # если по parent+child ничего не нашли — fallback:
+                # плоская категория, в имени которой встречаются и group, и category
+                if not cats.exists():
+                    cats = Category.objects.filter(
+                        Q(name__icontains=cat) & Q(name__icontains=group)
+                    )
+
+            elif cat_q:
+                # только конкретная категория
+                cats = Category.objects.filter(cat_q)
+
+            elif grp_q:
+                # только группа: берём сам родитель и всех его детей
+                parents = Category.objects.filter(grp_q)
+                cats = Category.objects.filter(
+                    Q(id__in=parents) | Q(parent__in=parents)
+                )
+
+            qs = qs.filter(category__in=cats).distinct()
+
+        # ----- ФИЛЬТР ПО РАЗМЕРАМ -----
+        sizes = qp.get("sizes")
+        if sizes:
+            size_list = [s.strip() for s in sizes.split(",") if s.strip()]
+            if size_list:
+                qs = qs.filter(
+                    variants__is_active=True,
+                    variants__size_value__in=size_list,
+                ).distinct()
+
+        # ----- ХИТ / NEW / SALE -----
         if truthy(qp.get("popular")) or truthy(qp.get("is_hit")):
             qs = qs.filter(is_hit=True)
 
@@ -56,12 +134,17 @@ class ProductListView(ListAPIView):
 
         if truthy(qp.get("is_sale")):
             qs = qs.filter(is_sale=True)
-        try:
-            limit = int(qp.get("limit")) if qp.get("limit") else None
-        except ValueError:
-            limit = None
-        if limit:
-            qs = qs[:limit]
+
+        # ----- LIMIT -----
+        limit_raw = qp.get("limit")
+        if limit_raw:
+            try:
+                limit = int(limit_raw)
+                if limit > 0:
+                    qs = qs[:limit]
+            except (TypeError, ValueError):
+                pass
+
         return qs
 
 

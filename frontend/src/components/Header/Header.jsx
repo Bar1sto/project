@@ -1,63 +1,79 @@
-import { Profiler, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-
 import logo from "../../assets/logo.png";
 import SearchIcon from "../../assets/icons/search.svg?react";
 import UserIcon from "../../assets/icons/profile.svg?react";
 import FavoriteIcon from "../../assets/icons/favorite.svg?react";
 import CartIcon from "../../assets/icons/cart.svg?react";
-import api from "../../lib/api"; // <-- вот это добавь
+import api from "../../lib/api";
 
 const CATALOG = [
   {
     title: "Игрок",
     items: [
-      "Клюшки",
-      "Коньки",
-      "Шлема",
-      "Текстиль",
-      "Сумки",
-      "Щитки",
-      "Трусы",
-      "Перчатки",
-      "Налокотники",
-      "Нагрудники",
-      "Набор экипировки",
+      { label: "Клюшки", value: "Клюшка" },
+      { label: "Коньки", value: "Коньки" },
+      { label: "Шлема", value: "Шлем" },
+      { label: "Текстиль", value: "Текстиль" },
+      { label: "Сумки", value: "Сумки" },
+      { label: "Щитки", value: "Щитки" },
+      { label: "Трусы", value: "Трусы" },
+      { label: "Перчатки", value: "Перчатки" },
+      { label: "Налокотники", value: "Налокотники" },
+      { label: "Нагрудники", value: "Нагрудник" },
+      { label: "Набор экипировки", value: "Набор экипировки" },
     ],
   },
   {
     title: "Вратарь",
     items: [
-      "Клюшки",
-      "Коньки",
-      "Шлема",
-      "Текстиль",
-      "Сумки",
-      "Блокер",
-      "Блокер+ловушка",
-      "Ловушка",
-      "Нагрудник",
-      "Трусы",
-      "Щитки",
+      { label: "Клюшки", value: "Клюшка вратаря" }, // имя из админки
+      { label: "Коньки", value: "Коньки вратаря" },
+      { label: "Шлема", value: "Шлем вратаря" },
+      { label: "Текстиль", value: "Текстиль вратаря" },
+      { label: "Сумки", value: "Сумки вратаря" },
+      { label: "Блокер", value: "Блокер" },
+      { label: "Блокер+ловушка", value: "Блокер+ловушка" },
+      { label: "Ловушка", value: "Ловушка" },
+      { label: "Нагрудник", value: "Нагрудник вратаря" },
+      { label: "Трусы", value: "Трусы вратаря" },
+      { label: "Щитки", value: "Щитки вратаря" },
     ],
   },
-  { title: "Фигурное катание", items: ["Коньки", "Одежда"] },
-  { title: "Флорбол", items: ["Клюшки", "Аксессуары"] },
+  {
+    title: "Фигурное катание",
+    items: [
+      { label: "Коньки", value: "Коньки фигурные" },
+      { label: "Одежда", value: "Одежда для фигурного катания" },
+    ],
+  },
+  {
+    title: "Флорбол",
+    items: [
+      { label: "Клюшки", value: "Клюшка флорбол" },
+      { label: "Аксессуары", value: "Аксессуары флорбол" },
+    ],
+  },
   {
     title: "Тренировка",
-    items: ["Ворота", "Мячи", "Искусственный лед", "Тренировочный инвентарь"],
+    items: [
+      { label: "Ворота", value: "Ворота" },
+      { label: "Мячи", value: "Мячи" },
+      { label: "Искусственный лед", value: "Искусственный лед" },
+      { label: "Тренировочный инвентарь", value: "Тренировочный инвентарь" },
+    ],
   },
   {
     title: "Аксессуары",
     items: [
-      "Бутылки",
-      "Доски тактические",
-      "Коврики",
-      "Медицинские средства",
-      "Мячи",
-      "Наклейки",
-      "Шайбы",
-      "Сувениры",
+      { label: "Бутылки", value: "Бутылки" },
+      { label: "Доски тактические", value: "Доски тактические" },
+      { label: "Коврики", value: "Коврики" },
+      { label: "Медицинские средства", value: "Медицинские средства" },
+      { label: "Мячи", value: "Мячи аксессуары" },
+      { label: "Наклейки", value: "Наклейки" },
+      { label: "Шайбы", value: "Шайбы" },
+      { label: "Сувениры", value: "Сувениры" },
     ],
   },
 ];
@@ -66,17 +82,36 @@ const isNode = (x) =>
   x && typeof x === "object" && !Array.isArray(x) && "items" in x;
 
 export default function Header() {
+  const [cartTotal, setCartTotal] = useState(0);
+
+  const formatRub = (n) =>
+    new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 })
+      .format(Number(n) || 0)
+      .replace(/\u00A0/g, " ");
+
+  const loadCartTotal = useCallback(async () => {
+    try {
+      const cart = await api.getCart();
+      const t = Number.parseFloat(cart?.total);
+      setCartTotal(Number.isFinite(t) ? t : 0);
+    } catch {
+      setCartTotal(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCartTotal();
+    const onChanged = () => loadCartTotal();
+    window.addEventListener("cart:changed", onChanged);
+    return () => window.removeEventListener("cart:changed", onChanged);
+  }, [loadCartTotal]);
+
   const location = useLocation();
-  const navigate = useNavigate(); // <-- уже импортирован, начинаем использовать
+  const navigate = useNavigate();
 
   const handleProfileClick = () => {
-    // если есть токен — ведём в личный кабинет
-    if (api.hasToken()) {
-      navigate("/profile");
-    } else {
-      // нет токена — на страницу регистрации/авторизации
-      navigate("/register");
-    }
+    if (api.hasToken()) navigate("/profile");
+    else navigate("/register");
   };
 
   // поиск
@@ -119,7 +154,7 @@ export default function Header() {
     setStack([]);
   };
 
-  // вычисляем высоту шапки, чтобы приклеить мегаменю фиксировано к низу хедера
+  // вычисляем высоту шапки для позиционирования мегаменю
   const headerRef = useRef(null);
   const [headerH, setHeaderH] = useState(72);
   useEffect(() => {
@@ -134,7 +169,7 @@ export default function Header() {
 
   const onSubmitSearch = (e) => {
     e.preventDefault();
-    // подключим поиск позже
+    // поиск потом
   };
 
   return (
@@ -142,9 +177,9 @@ export default function Header() {
       ref={headerRef}
       className="bg-[#E5E5E5] font-[Actay] sticky top-0 z-50"
     >
-      {/* Верхняя полоса — сетка из трёх колонок, чтобы меню было строго по центру */}
+      {/* верхняя полоса */}
       <div className="mx-auto w-full max-w-screen-2xl px-4 lg:px-6 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-        {/* бургер — показываем до XL (раньше уходим в мобильный, как просил) */}
+        {/* бургер */}
         <button
           onClick={() => setMobileOpen(true)}
           className="xl:hidden inline-flex items-center justify-center rounded-lg border border-[#1C1A61]/20 w-10 h-10"
@@ -160,7 +195,7 @@ export default function Header() {
           </svg>
         </button>
 
-        {/* логотип слева */}
+        {/* логотип */}
         <div className="justify-self-start">
           <img
             src={logo}
@@ -169,14 +204,17 @@ export default function Header() {
           />
         </div>
 
-        {/* навигация строго по центру (появляется с XL) */}
+        {/* навигация */}
         <nav className="hidden xl:flex items-center gap-[clamp(20px,3vw,56px)] justify-self-center">
           <div
             className="relative"
             onMouseEnter={openMenu}
             onMouseLeave={scheduleClose}
           >
-            <button className="font text-[clamp(16px,1.6vw,22px)] text-[#1C1A61] hover:text-[#EC1822] py-1">
+            <button
+              className="font text-[clamp(16px,1.6vw,22px)] text-[#1C1A61] hover:text-[#EC1822] py-1"
+              onClick={() => navigate("/catalog")}
+            >
               Каталог
             </button>
           </div>
@@ -266,11 +304,19 @@ export default function Header() {
             [&_*]:stroke-current
             [&_*]:stroke-2"
             />
+            {cartTotal > 0 && (
+              <span
+                className="ml-2 hidden md:inline-flex items-center h-6 px-3 rounded-full bg-[#1C1A61] text-white text-[13px] font-semibold leading-none"
+                title="Сумма корзины"
+              >
+                {formatRub(cartTotal)} ₽
+              </span>
+            )}
           </Link>
         </div>
       </div>
 
-      {/* полоса поиска под шапкой */}
+      {/* полоса поиска */}
       {isSearchOpen && (
         <div className="bg-[#E5E5E5] border-t border-[#1C1A61]/10">
           <form
@@ -295,8 +341,7 @@ export default function Header() {
         </div>
       )}
 
-      {/* ===== DESKTOP MEGA-MENU — ВО ВСЮ ШИРИНУ ЭКРАНА ===== */}
-      {/* делаем fixed + inset-x-0 и задаём top равным высоте хедера */}
+      {/* DESKTOP MEGA-MENU */}
       <div
         onMouseEnter={openMenu}
         onMouseLeave={scheduleClose}
@@ -322,35 +367,39 @@ export default function Header() {
                   {col.title}
                 </h3>
                 <ul className="space-y-2">
-                  {col.items.map((item, i) => (
-                    <li key={i}>
-                      <Link
-                        to="/"
-                        className="block text-[#1C1A61] font-medium text-[clamp(15px,1.2vw,20px)]
+                  {col.items.map((item, i) => {
+                    const label = typeof item === "string" ? item : item.label;
+                    const value = typeof item === "string" ? item : item.value;
+
+                    return (
+                      <li key={i}>
+                        <Link
+                          to={`/catalog?group=${encodeURIComponent(
+                            col.title
+                          )}&category=${encodeURIComponent(value)}`}
+                          className="block text-[#1C1A61] font-medium text-[clamp(15px,1.2vw,20px)]
                                    hover:text-[#EC1822] transition-colors"
-                      >
-                        {item}
-                      </Link>
-                    </li>
-                  ))}
+                        >
+                          {label}
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ))}
           </div>
 
-          {/* «подложка» с большим радиусом снизу — как в макете */}
           <div className="mx-auto w-full max-w-[1600px] px-6 pb-6">
             <div className="rounded-b-3xl bg-[#E5E5E5]" />
           </div>
         </div>
       </div>
 
-      {/* ===== МОБИЛЬНЫЙ КАТАЛОГ (Xl-) ===== */}
+      {/* МОБИЛЬНЫЙ КАТАЛОГ */}
       {mobileOpen && (
         <div className="fixed inset-0 z-[70]">
-          {/* фон */}
           <div className="absolute inset-0 bg-black/40" onClick={resetMobile} />
-          {/* панель */}
           <div className="absolute inset-y-0 left-0 w-full sm:max-w-md bg-white flex flex-col">
             <div className="px-4 py-3 flex items-center gap-3 border-b">
               <button
@@ -381,7 +430,6 @@ export default function Header() {
               </button>
 
               <div className="flex-1 min-w-0">
-                {/* крошки — синий текст и красный hover на кликабельных */}
                 <div className="text-sm text-[#1C1A61] truncate">
                   {crumbs.map((c, i) => (
                     <span key={i} className="hover:text-[#EC1822]">
@@ -398,23 +446,39 @@ export default function Header() {
             <div className="flex-1 overflow-y-auto p-2">
               {currentNode.items.map((it, i) => {
                 const leaf = !isNode(it);
-                const title = leaf ? it : it.title;
+                const label = leaf
+                  ? typeof it === "string"
+                    ? it
+                    : it.label
+                  : it.title;
+                const value = leaf
+                  ? typeof it === "string"
+                    ? it
+                    : it.value
+                  : null;
+
                 return (
                   <div key={i} className="border-b">
                     {leaf ? (
                       <Link
-                        to="/"
+                        to={
+                          currentNode.title === "Каталог"
+                            ? "/catalog"
+                            : `/catalog?group=${encodeURIComponent(
+                                currentNode.title
+                              )}&category=${encodeURIComponent(value)}`
+                        }
                         onClick={resetMobile}
                         className="flex items-center justify-between px-3 py-4 text-[17px] text-[#1C1A61] hover:text-[#EC1822] transition-colors"
                       >
-                        <span>{title}</span>
+                        <span>{label}</span>
                       </Link>
                     ) : (
                       <button
                         onClick={() => enter(it)}
                         className="w-full flex items-center justify-between px-3 py-4 text-[17px] text-[#1C1A61] hover:text-[#EC1822] transition-colors"
                       >
-                        <span className="text-left">{title}</span>
+                        <span className="text-left">{label}</span>
                         <svg
                           className="w-5 h-5 shrink-0"
                           viewBox="0 0 24 24"

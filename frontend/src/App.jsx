@@ -9,6 +9,7 @@ import Profile from "./components/Profile/Profile.jsx";
 import FavoritesPage from "./pages/FavoritesPage/Favorites.jsx"; // если есть
 import CartPage from "./components/Cart/Cart.jsx"; // проверь путь
 import RequireAuth from "./components/routing/RequireAuth";
+import CatalogPage from "./pages/CatalogPage/Catalog.jsx";
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
             }
           />
           <Route path="/favorites" element={<FavoritesPage />} />
+          <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/cart" element={<CartPage />} />
         </Routes>
       </main>

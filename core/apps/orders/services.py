@@ -1,17 +1,18 @@
 from decimal import Decimal
-from django.utils import timezone
-from django.db import transaction
-from django_redis import get_redis_connection
-from django.db.models import Case, When, IntegerField
-from apps.customers.models import Bonus
-from typing import Dict, Any, Optional
-from apps.products.models import ProductVariant
-from apps.payments.models import Payment
-from apps.payments.clients import TBankClient
-from apps.products.selectors import base_products_qs
-from .models import Cart, CartItem
-from .selectors import get_or_create_draft_cart, cart_items_qs
+from typing import Any, Dict, Optional
 
+from apps.customers.models import Bonus
+from apps.payments.clients import TBankClient
+from apps.payments.models import Payment
+from apps.products.models import ProductVariant
+from apps.products.selectors import base_products_qs
+from django.db import transaction
+from django.db.models import Case, IntegerField, When
+from django.utils import timezone
+from django_redis import get_redis_connection
+
+from .models import Cart, CartItem
+from .selectors import cart_items_qs, get_or_create_draft_cart
 
 DEC_100 = Decimal("100")
 
@@ -21,12 +22,14 @@ DEC_100 = Decimal("100")
 def _cart_conn():
     return get_redis_connection("cart")
 
+
 def _cart_key(*, user_id=None, anon_id=None):
     if user_id:
         return f"cart:u:{user_id}"
     if anon_id:
         return f"cart:a:{anon_id}"
     return None
+
 
 def anon_cart_items(*, user_id=None, anon_id=None) -> dict[int, int]:
     key = _cart_key(user_id=user_id, anon_id=anon_id)
@@ -41,6 +44,7 @@ def anon_cart_items(*, user_id=None, anon_id=None) -> dict[int, int]:
             pass
     return out
 
+
 def anon_cart_add(*, anon_id: str, variant_id: int, qty: int) -> None:
     key = _cart_key(user_id=None, anon_id=anon_id)
     if not key:
@@ -51,29 +55,36 @@ def anon_cart_add(*, anon_id: str, variant_id: int, qty: int) -> None:
     else:
         conn.hset(key, variant_id, qty)
 
+
 def anon_cart_remove(*, anon_id: str, variant_id: int) -> None:
     key = _cart_key(user_id=None, anon_id=anon_id)
     if key:
         _cart_conn().hdel(key, variant_id)
+
 
 def anon_cart_clear(*, user_id=None, anon_id=None) -> None:
     key = _cart_key(user_id=user_id, anon_id=anon_id)
     if key:
         _cart_conn().delete(key)
 
+
 def products_preserve_order(ids: list[int]):
     if not ids:
         return base_products_qs().none()
-    ordering = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(ids)], output_field=IntegerField())
+    ordering = Case(
+        *[When(pk=pk, then=pos) for pos, pk in enumerate(ids)],
+        output_field=IntegerField(),
+    )
     return base_products_qs().filter(pk__in=ids).order_by(ordering)
+
 
 def build_cart_response_from_ids(qty_map: dict[int, int]) -> tuple[list[dict], str]:
     if not qty_map:
         return [], "0.00"
 
-    variants = (ProductVariant.objects
-                .select_related("product", "product__brand", "product__category")
-                .filter(pk__in=list(qty_map.keys())))
+    variants = ProductVariant.objects.select_related(
+        "product", "product__brand", "product__category"
+    ).filter(pk__in=list(qty_map.keys()))
 
     items = []
     total = Decimal("0")
@@ -87,21 +98,25 @@ def build_cart_response_from_ids(qty_map: dict[int, int]) -> tuple[list[dict], s
         price = v.current_price or Decimal("0")
         line_total = price * qty
         total += line_total
-        items.append({
-            "variant_id": v.id,
-            "qty": qty,
-            "price": f"{price:.2f}",
-            "line_total": f"{line_total:.2f}",
-            "product": {
-                "slug": p.slug,
-                "name": p.name,
-                "image": (p.image.url if getattr(p, "image", None) else None),
-                "brand": (p.brand.name if p.brand_id else None),
+        items.append(
+            {
+                "variant_id": v.id,
+                "qty": qty,
+                "price": f"{price:.2f}",
+                "line_total": f"{line_total:.2f}",
+                "product": {
+                    "slug": p.slug,
+                    "name": p.name,
+                    "image": (p.image.url if getattr(p, "image", None) else None),
+                    "brand": (p.brand.name if p.brand_id else None),
+                },
             }
-        })
+        )
     return items, f"{total:.2f}"
 
+
 # БД-корзина (залогиненные)
+
 
 def db_cart_add_or_set(client, *, variant_id: int, qty: int) -> None:
     cart = get_or_create_draft_cart(client)
@@ -109,7 +124,9 @@ def db_cart_add_or_set(client, *, variant_id: int, qty: int) -> None:
         CartItem.objects.filter(cart=cart, product_variant_id=variant_id).delete()
         return
 
-    variant = ProductVariant.objects.select_related("product").filter(pk=variant_id).first()
+    variant = (
+        ProductVariant.objects.select_related("product").filter(pk=variant_id).first()
+    )
     if not variant or not variant.product.is_active:
         return
 
@@ -123,13 +140,16 @@ def db_cart_add_or_set(client, *, variant_id: int, qty: int) -> None:
         obj.quantity = qty
         obj.save(update_fields=["quantity"])
 
+
 def db_cart_remove(client, *, variant_id: int) -> None:
     cart = get_or_create_draft_cart(client)
     CartItem.objects.filter(cart=cart, product_variant_id=variant_id).delete()
 
+
 def db_cart_clear(client) -> None:
     cart = get_or_create_draft_cart(client)
     CartItem.objects.filter(cart=cart).delete()
+
 
 def build_db_cart_response(client) -> dict:
     cart = get_or_create_draft_cart(client)
@@ -143,21 +163,32 @@ def build_db_cart_response(client) -> dict:
         price = v.current_price or Decimal("0")
         line_total = price * ci.quantity
         total += line_total
-        items.append({
-            "variant_id": v.id,
-            "qty": ci.quantity,
-            "price": f"{price:.2f}",
-            "line_total": f"{line_total:.2f}",
-            "product": {
-                "slug": p.slug,
-                "name": p.name,
-                "image": (p.image.url if getattr(p, "image", None) else None),
-                "brand": (p.brand.name if p.brand_id else None),
+        items.append(
+            {
+                "variant_id": v.id,
+                "qty": ci.quantity,
+                "price": f"{price:.2f}",
+                "line_total": f"{line_total:.2f}",
+                "variant": {
+                    "size_type": v.size_type,
+                    "size_value": v.size_value,
+                    "color": v.color,
+                    "in_stock": v.is_active,
+                    "is_order": v.is_order,
+                },
+                "product": {
+                    "slug": p.slug,
+                    "name": p.name,
+                    "image": (p.image.url if getattr(p, "image", None) else None),
+                    "brand": (p.brand.name if p.brand_id else None),
+                },
             }
-        })
+        )
     return {"items": items, "total": f"{total:.2f}"}
 
+
 # Merge анонимной корзины в БД
+
 
 def merge_anon_cart_into_db_cart(*, client, anon_id: str) -> None:
     anon_map = anon_cart_items(user_id=None, anon_id=anon_id)
@@ -173,7 +204,9 @@ def merge_anon_cart_into_db_cart(*, client, anon_id: str) -> None:
 
     anon_cart_clear(user_id=None, anon_id=anon_id)
 
+
 # Оформление / бонусы / пересчёт
+
 
 def cart_recalculate(cart: Cart) -> None:
     items = cart_items_qs(cart)
@@ -184,9 +217,9 @@ def cart_recalculate(cart: Cart) -> None:
         total += price * ci.quantity
     Cart.objects.filter(pk=cart.pk).update(cart_total_sum=total)
 
+
 @transaction.atomic
 def order_mark_paid_by_id(cart_id: int) -> None:
-
     cart = Cart.objects.select_for_update().get(pk=cart_id)
 
     # Если уже оформлена — ничего не делаем
@@ -208,17 +241,24 @@ def order_mark_paid_by_id(cart_id: int) -> None:
             Bonus.create_from_order(cart)
     except Exception as e:
         import logging
-        logging.getLogger(__name__).exception("Bonus.create_from_order(cart=%s) failed", cart.pk)
-       
+
+        logging.getLogger(__name__).exception(
+            "Bonus.create_from_order(cart=%s) failed", cart.pk
+        )
+
 
 # «Повторить заказ»
 
+
 @transaction.atomic
-def repeat_order_into_draft(client, *, from_cart_id: int, merge_strategy: str = "max") -> int:
-    src = (Cart.objects
-           .select_for_update()
-           .filter(pk=from_cart_id, client=client, is_ordered=True)
-           .first())
+def repeat_order_into_draft(
+    client, *, from_cart_id: int, merge_strategy: str = "max"
+) -> int:
+    src = (
+        Cart.objects.select_for_update()
+        .filter(pk=from_cart_id, client=client, is_ordered=True)
+        .first()
+    )
     if not src:
         return 0
 
@@ -245,6 +285,7 @@ def repeat_order_into_draft(client, *, from_cart_id: int, merge_strategy: str = 
 
     return moved
 
+
 @transaction.atomic
 def sync_by_payment_or_order_id(ident: str) -> Dict[str, Any]:
     """
@@ -264,9 +305,19 @@ def sync_by_payment_or_order_id(ident: str) -> Dict[str, Any]:
     oid = str(resp.get("OrderId") or "")
 
     if pid:
-        pay = Payment.objects.select_for_update().filter(payment_id=pid).order_by("-id").first()
+        pay = (
+            Payment.objects.select_for_update()
+            .filter(payment_id=pid)
+            .order_by("-id")
+            .first()
+        )
     if not pay and oid:
-        pay = Payment.objects.select_for_update().filter(order_id=oid).order_by("-id").first()
+        pay = (
+            Payment.objects.select_for_update()
+            .filter(order_id=oid)
+            .order_by("-id")
+            .first()
+        )
 
     if pay:
         # сохраним «последний статус» и сам ответ
@@ -284,4 +335,3 @@ def sync_by_payment_or_order_id(ident: str) -> Dict[str, Any]:
             order_mark_paid_by_id(pay.cart_id)
 
     return resp
-    
