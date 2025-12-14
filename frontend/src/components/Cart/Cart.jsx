@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Container from "../../components/ui/Container";
 import api from "../../lib/api";
 
@@ -157,6 +157,7 @@ function normalizeCartItem(x) {
 }
 
 export default function Cart() {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [serverTotal, setServerTotal] = useState("0.00");
   const [loading, setLoading] = useState(true);
@@ -557,8 +558,16 @@ export default function Cart() {
 
             <button
               type="button"
-              className="mt-4 h-[44px] px-6 rounded-[10px] border border-[#1C1A61] bg-[#E5E5E5] text-[#1C1A61] text-[16px] font-semibold hover:bg-[#1C1A61] hover:text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="mt-4 h-[44px] px-6 rounded-[10px] border border-[#1C1A61] bg-[#E5E5E5] text-[#1C1A61] text-[16px] font-semibold hover:bg-[#1C1A61] hover:text:white transition disabled:opacity-40 disabled:cursor-not-allowed"
               disabled={loading || items.length === 0}
+              onClick={() => {
+                navigate("/checkout", {
+                  state: {
+                    appliedPromo, // объект с info по промику
+                    bonusApplied, // сколько списали бонусов
+                  },
+                });
+              }}
             >
               Оформить заказ
             </button>

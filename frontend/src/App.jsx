@@ -6,10 +6,11 @@ import HomePage from "./pages/HomePage.jsx";
 import RegisterPage from "./pages/RegisterPage/RegisterPage.jsx";
 import BigProductPage from "./pages/BigProductPage.jsx";
 import Profile from "./components/Profile/Profile.jsx";
-import FavoritesPage from "./pages/FavoritesPage/Favorites.jsx"; // если есть
-import CartPage from "./components/Cart/Cart.jsx"; // проверь путь
+import FavoritesPage from "./pages/FavoritesPage/Favorites.jsx";
+import CartPage from "./components/Cart/Cart.jsx";
 import RequireAuth from "./components/routing/RequireAuth";
 import CatalogPage from "./pages/CatalogPage/Catalog.jsx";
+import Checkout from "./pages/Checkout/Checkout.jsx";
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/cart" element={<CartPage />} />
+          <Route path="/checkout" element={<Checkout />} />
         </Routes>
       </main>
       <Footer />

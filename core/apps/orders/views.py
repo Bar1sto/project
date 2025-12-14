@@ -8,14 +8,22 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 from .services import (
-    anon_cart_add, anon_cart_remove, anon_cart_items, build_cart_response_from_ids,
-    db_cart_add_or_set, db_cart_remove, build_db_cart_response,
-    merge_anon_cart_into_db_cart, repeat_order_into_draft,
+    anon_cart_add,
+    anon_cart_remove,
+    anon_cart_items,
+    build_cart_response_from_ids,
+    db_cart_add_or_set,
+    db_cart_remove,
+    build_db_cart_response,
+    merge_anon_cart_into_db_cart,
+    repeat_order_into_draft,
 )
+
 
 def _anon_header_name() -> str:
     cfg = getattr(settings, "RECENTLY_VIEWED", None)
     return (cfg or {}).get("ANON_HEADER", "X-Anon-Id")
+
 
 class CartRetrieveView(APIView):
     permission_classes = [AllowAny]
@@ -47,21 +55,46 @@ class CartItemSetView(APIView):
         )
     )
     def post(self, request):
+        # 1. Жёстко валидируем вход
         try:
             variant_id = int(request.data.get("variant_id"))
             qty = int(request.data.get("qty"))
         except (TypeError, ValueError):
-            return Response({"detail": "variant_id and qty must be integers"}, status=400)
+            return Response(
+                {"detail": "variant_id and qty must be integers"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        if request.user.is_authenticated and hasattr(request.user, "client"):
-            db_cart_add_or_set(request.user.client, variant_id=variant_id, qty=qty)
-        else:
-            anon_id = request.headers.get(_anon_header_name())
-            if not anon_id:
-                return Response({"detail": f"header {_anon_header_name()} required"}, status=400)
-            anon_cart_add(anon_id=anon_id, variant_id=variant_id, qty=qty)
+        if qty < 0:
+            qty = 0
 
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        client = getattr(request.user, "client", None)
+
+        try:
+            if request.user.is_authenticated and client is not None:
+                db_cart_add_or_set(client, variant_id=variant_id, qty=qty)
+                data = build_db_cart_response(client)
+            else:
+                anon_id = request.headers.get(_anon_header_name())
+                if not anon_id:
+                    return Response(
+                        {"detail": f"header {_anon_header_name()} required"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                anon_cart_add(anon_id=anon_id, variant_id=variant_id, qty=qty)
+                qty_map = anon_cart_items(user_id=None, anon_id=anon_id)
+                items, total = build_cart_response_from_ids(qty_map)
+                data = {"items": items, "total": total}
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).exception("CartItemSetView error")
+            return Response(
+                {"detail": f"cart_item_error: {e.__class__.__name__}: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class CartItemDeleteView(APIView):
@@ -74,7 +107,9 @@ class CartItemDeleteView(APIView):
         else:
             anon_id = request.headers.get(_anon_header_name())
             if not anon_id:
-                return Response({"detail": f"header {_anon_header_name()} required"}, status=400)
+                return Response(
+                    {"detail": f"header {_anon_header_name()} required"}, status=400
+                )
             anon_cart_remove(anon_id=anon_id, variant_id=variant_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -88,13 +123,14 @@ class CartMergeView(APIView):
             return Response({"detail": "client profile required"}, status=409)
         anon_id = request.headers.get(_anon_header_name())
         if not anon_id:
-            return Response({"detail": f"header {_anon_header_name()} required"}, status=400)
+            return Response(
+                {"detail": f"header {_anon_header_name()} required"}, status=400
+            )
         merge_anon_cart_into_db_cart(client=request.user.client, anon_id=anon_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CartRepeatView(APIView):
-
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
 
@@ -114,5 +150,7 @@ class CartRepeatView(APIView):
         if not client:
             return Response({"detail": "client profile required"}, status=409)
 
-        moved = repeat_order_into_draft(client, from_cart_id=order_id, merge_strategy="max")
+        moved = repeat_order_into_draft(
+            client, from_cart_id=order_id, merge_strategy="max"
+        )
         return Response({"moved": moved}, status=status.HTTP_200_OK)

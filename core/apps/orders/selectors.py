@@ -5,19 +5,28 @@ from apps.orders.models import (
 
 
 def get_or_create_draft_cart(client) -> Cart:
-    cart, _ = Cart.objects.get_or_create(
+    """
+    Возвращает текущую черновую корзину клиента.
+    Если таких несколько — берём самую новую.
+    Если ни одной нет — создаём.
+    """
+    qs = Cart.objects.filter(client=client, is_ordered=False).order_by("-id")
+
+    cart = qs.first()
+    if cart:
+        return cart
+
+    return Cart.objects.create(
         client=client,
         is_ordered=False,
-        defaults={
-            'status': 'draft',
-        },
+        status="draft",
     )
-    return cart
+
 
 def cart_items_qs(cart: Cart):
-    return (CartItem.objects.select_related(
-        'product_variant',
-        'product_variant__product',
-        'product_variant__product__brand',
-        'product_variant__product__category',
-    ).filter(cart=cart))
+    return CartItem.objects.select_related(
+        "product_variant",
+        "product_variant__product",
+        "product_variant__product__brand",
+        "product_variant__product__category",
+    ).filter(cart=cart)
