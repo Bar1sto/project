@@ -23,9 +23,21 @@ class TBankClient:
         self.session = session or requests.Session()
 
     def _make_token(self, payload: Dict[str, Any]) -> str:
-        data = {k: v for k, v in payload.items() if v not in (None, "") and k != "Token"}
-        data["Password"] = self.password
-        raw = "".join(str(v) for k, v in sorted(data.items()))
+        flat: Dict[str, Any] = {}
+
+        for k, v in payload.items():
+            if k == "Token":
+                continue
+            if v in (None, ""):
+                continue
+            # вложенные объекты (DATA, Receipt и т.п.) в токен НЕ включаем
+            if isinstance(v, (dict, list, tuple)):
+                continue
+            flat[k] = v
+
+        flat["Password"] = self.password
+
+        raw = "".join(str(v) for k, v in sorted(flat.items()))
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     def _post(self, method: str, payload: Dict[str, Any]) -> Dict[str, Any]:

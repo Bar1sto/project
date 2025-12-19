@@ -186,11 +186,13 @@ export default function Footer() {
                 className="inline-flex items-center hover:scale-110"
                 title="Telegram"
               >
-                <TelegramIcon className="w-7 h-7
+                <TelegramIcon
+                  className="w-7 h-7
                     transition-colors
                     hover:text-[#EC1822] 
                     fill-[none]
-                    " />
+                    "
+                />
               </a>
             </div>
           </div>

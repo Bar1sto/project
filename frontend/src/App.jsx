@@ -1,4 +1,3 @@
-// src/App.jsx
 import { Routes, Route } from "react-router-dom";
 import Header from "./components/Header/Header.jsx";
 import Footer from "./components/Footer/Footer.jsx";
@@ -11,6 +10,9 @@ import CartPage from "./components/Cart/Cart.jsx";
 import RequireAuth from "./components/routing/RequireAuth";
 import CatalogPage from "./pages/CatalogPage/Catalog.jsx";
 import Checkout from "./pages/Checkout/Checkout.jsx";
+
+import PaySuccess from "./pages/PaySuccess.jsx";
+import PayFail from "./pages/PayFail.jsx";
 
 export default function App() {
   return (
@@ -29,10 +31,14 @@ export default function App() {
               </RequireAuth>
             }
           />
+
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<Checkout />} />
+
+          <Route path="/pay/success" element={<PaySuccess />} />
+          <Route path="/pay/fail" element={<PayFail />} />
         </Routes>
       </main>
       <Footer />

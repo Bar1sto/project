@@ -237,6 +237,22 @@ export const api = {
     if (r.ok) window.dispatchEvent(new CustomEvent("cart:changed")); // ✅
     return r.ok;
   },
+
+  // === Т-банк: инициализация платежа для текущей draft-корзины ===
+  async initPayment(payload) {
+    const r = await api._fetch("/payments/init/", {
+      method: "POST",
+      body: payload,
+    });
+
+    if (!r.ok) {
+      const detail =
+        r.data && (r.data.detail || r.data.error || r.data.message);
+      throw new Error(detail || `pay_init_${r.status}`);
+    }
+
+    return r.data;
+  },
 };
 
 export default api;

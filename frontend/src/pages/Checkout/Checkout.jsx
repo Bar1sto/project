@@ -126,26 +126,33 @@ export default function Checkout() {
     return false;
   }, [loading, isEmpty, deliveryType, address]);
 
-  const handlePayClick = () => {
+  const handlePayClick = async () => {
+    if (!canPay) return;
+
     const finalAddress =
       deliveryType === "pickup" ? pickupAddress : address.trim();
 
-    // пока заглушка — позже здесь будет создание заказа + переход в банк
-    console.log("Оплата (заглушка). Данные:", {
-      deliveryType,
-      address: finalAddress,
-      addressComment,
-      items,
-      baseTotal,
-      promoDiscount,
-      bonusDiscount,
-      finalTotal,
-      pickupId,
-    });
+    try {
+      const payload = {
+        delivery_type: deliveryType, // "pickup" | "delivery"
+        address: finalAddress, // строка адреса / магазина
+        address_comment: addressComment || "", // комментарий к адресу
+        pickup_id: deliveryType === "pickup" ? pickupId : null,
+      };
 
-    alert(
-      "Оплата пока в разработке.\nЗдесь будет переход в платёжный туннель Т-банка."
-    );
+      const data = await api.initPayment(payload);
+
+      if (data && data.payment_url) {
+        // уходим в платёжную форму Т-банка
+        window.location.href = data.payment_url;
+      } else {
+        console.error("initPayment: нет payment_url в ответе", data);
+        alert("Не удалось получить ссылку на оплату. Попробуйте ещё раз.");
+      }
+    } catch (e) {
+      console.error("initPayment error", e);
+      alert("Не удалось запустить оплату. Попробуйте ещё раз.");
+    }
   };
 
   return (
