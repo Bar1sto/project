@@ -253,6 +253,64 @@ export const api = {
 
     return r.data;
   },
+
+  async getOrdersHistory() {
+    const r = await api._fetch("/orders/history/", { method: "GET" });
+    if (!r.ok) {
+      throw new Error("orders_history_" + r.status);
+    }
+    // DRF ListAPIView без пагинации вернёт просто массив
+    // но на будущее подстрахуемся под вариант с {results: []}
+    return r.data?.results || r.data || [];
+  },
+
+  async repeatOrder(orderId) {
+    if (!orderId) throw new Error("order_id_required");
+
+    const r = await api._fetch(`/orders/cart/repeat/${orderId}/`, {
+      method: "POST",
+    });
+
+    if (!r.ok) {
+      throw new Error("order_repeat_" + r.status);
+    }
+
+    window.dispatchEvent(new CustomEvent("cart:changed"));
+    return r.data;
+  },
+
+  async getOrderDetail(orderId) {
+    if (!orderId) throw new Error("order_id_required");
+
+    const r = await api._fetch(`/orders/history/${orderId}/`, {
+      method: "GET",
+    });
+
+    if (!r.ok) {
+      console.error("getOrderDetail error", r);
+      throw new Error("order_detail_error");
+    }
+
+    return r.data;
+  },
+
+  async syncPayment(paymentId) {
+    if (!paymentId) {
+      throw new Error("payment_id_required");
+    }
+
+    const r = await api._fetch("/payments/sync/", {
+      method: "POST",
+      body: { payment_id: paymentId },
+    });
+
+    if (!r.ok) {
+      console.error("syncPayment error", r);
+      throw new Error("sync_payment_error");
+    }
+
+    return r.data;
+  },
 };
 
 export default api;

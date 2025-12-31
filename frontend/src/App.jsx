@@ -10,7 +10,7 @@ import CartPage from "./components/Cart/Cart.jsx";
 import RequireAuth from "./components/routing/RequireAuth";
 import CatalogPage from "./pages/CatalogPage/Catalog.jsx";
 import Checkout from "./pages/Checkout/Checkout.jsx";
-
+import OrderDetailPage from "./pages/OrderDetailPage.jsx";
 import PaySuccess from "./pages/PaySuccess.jsx";
 import PayFail from "./pages/PayFail.jsx";
 
@@ -28,6 +28,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <Profile />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/profile/orders/:orderId"
+            element={
+              <RequireAuth>
+                <OrderDetailPage />
               </RequireAuth>
             }
           />

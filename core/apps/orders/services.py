@@ -19,6 +19,41 @@ DEC_100 = Decimal("100")
 # Redis (анонимная корзина)
 
 
+@transaction.atomic
+def mark_cart_paid(cart: Cart):
+    """
+    Помечает корзину как оформленный заказ (после успешной оплаты).
+
+    Должно происходить автоматически, без участия админа:
+    - is_ordered = True (чтобы заказ попал в историю)
+    - status = 'not_completed' (у вас статусы: draft / completed / not_completed)
+    - ordered_at = текущая дата (у вас DateField)
+    - начисление бонусов (5%) через Bonus.create_from_order(cart)
+    """
+    if cart.is_ordered:
+        return cart
+
+    # пересчитываем сумму (важно: обновляет и объект, и БД)
+    cart_recalculate(cart)
+
+    cart.is_ordered = True
+    cart.status = "not_completed"
+    cart.ordered_at = timezone.now().date()
+    cart.save(update_fields=["is_ordered", "status", "ordered_at", "cart_total_sum"])
+
+    # начисляем бонусы (идемпотентность должна быть внутри Bonus.create_from_order)
+    try:
+        Bonus.create_from_order(cart)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "Bonus.create_from_order failed for cart=%s", cart.pk
+        )
+
+    return cart
+
+
 def _cart_conn():
     return get_redis_connection("cart")
 
@@ -31,6 +66,31 @@ def _cart_key(*, user_id=None, anon_id=None):
     return None
 
 
+def anon_cart_add(*, anon_id: str, variant_id: int, qty: int) -> None:
+    key = _cart_key(user_id=None, anon_id=anon_id)
+    if not key:
+        return
+    conn = _cart_conn()
+    if qty <= 0:
+        conn.hdel(key, str(variant_id))
+    else:
+        conn.hset(key, str(variant_id), int(qty))
+
+
+def anon_cart_remove(*, anon_id: str, variant_id: int) -> None:
+    key = _cart_key(user_id=None, anon_id=anon_id)
+    if not key:
+        return
+    _cart_conn().hdel(key, str(variant_id))
+
+
+def anon_cart_clear(*, user_id=None, anon_id=None) -> None:
+    key = _cart_key(user_id=user_id, anon_id=anon_id)
+    if not key:
+        return
+    _cart_conn().delete(key)
+
+
 def anon_cart_items(*, user_id=None, anon_id=None) -> dict[int, int]:
     key = _cart_key(user_id=user_id, anon_id=anon_id)
     if not key:
@@ -39,43 +99,15 @@ def anon_cart_items(*, user_id=None, anon_id=None) -> dict[int, int]:
     out = {}
     for k, v in raw.items():
         try:
-            out[int(k)] = int(v)
+            kk = k.decode() if hasattr(k, "decode") else k
+            vv = v.decode() if hasattr(v, "decode") else v
+            out[int(kk)] = int(vv)
         except Exception:
             pass
     return out
 
 
-def anon_cart_add(*, anon_id: str, variant_id: int, qty: int) -> None:
-    key = _cart_key(user_id=None, anon_id=anon_id)
-    if not key:
-        return
-    conn = _cart_conn()
-    if qty <= 0:
-        conn.hdel(key, variant_id)
-    else:
-        conn.hset(key, variant_id, qty)
-
-
-def anon_cart_remove(*, anon_id: str, variant_id: int) -> None:
-    key = _cart_key(user_id=None, anon_id=anon_id)
-    if key:
-        _cart_conn().hdel(key, variant_id)
-
-
-def anon_cart_clear(*, user_id=None, anon_id=None) -> None:
-    key = _cart_key(user_id=user_id, anon_id=anon_id)
-    if key:
-        _cart_conn().delete(key)
-
-
-def products_preserve_order(ids: list[int]):
-    if not ids:
-        return base_products_qs().none()
-    ordering = Case(
-        *[When(pk=pk, then=pos) for pos, pk in enumerate(ids)],
-        output_field=IntegerField(),
-    )
-    return base_products_qs().filter(pk__in=ids).order_by(ordering)
+# Преобразование корзины в ответ
 
 
 def build_cart_response_from_ids(qty_map: dict[int, int]) -> tuple[list[dict], str]:
@@ -95,33 +127,45 @@ def build_cart_response_from_ids(qty_map: dict[int, int]) -> tuple[list[dict], s
         qty = int(qty_map.get(v.id, 0))
         if qty <= 0:
             continue
+
         price = v.current_price or Decimal("0")
         line_total = price * qty
         total += line_total
+
         items.append(
             {
                 "variant_id": v.id,
                 "qty": qty,
                 "price": f"{price:.2f}",
                 "line_total": f"{line_total:.2f}",
+                "variant": {
+                    "size_type": v.size_type,
+                    "size_value": v.size_value,
+                    "color": v.color,
+                    "in_stock": v.is_active,
+                    "is_order": v.is_order,
+                },
                 "product": {
                     "slug": p.slug,
                     "name": p.name,
                     "image": (p.image.url if getattr(p, "image", None) else None),
-                    "brand": (p.brand.name if p.brand_id else None),
+                    "brand": (p.brand.name if p.brand else None),
+                    "category": (p.category.name if p.category else None),
                 },
             }
         )
+
     return items, f"{total:.2f}"
 
 
-# БД-корзина (залогиненные)
+# БД корзина (авторизованный клиент)
 
 
 def db_cart_add_or_set(client, *, variant_id: int, qty: int) -> None:
     cart = get_or_create_draft_cart(client)
     if qty <= 0:
         CartItem.objects.filter(cart=cart, product_variant_id=variant_id).delete()
+        cart_recalculate(cart)
         return
 
     variant = (
@@ -140,15 +184,13 @@ def db_cart_add_or_set(client, *, variant_id: int, qty: int) -> None:
         obj.quantity = qty
         obj.save(update_fields=["quantity"])
 
+    cart_recalculate(cart)
+
 
 def db_cart_remove(client, *, variant_id: int) -> None:
     cart = get_or_create_draft_cart(client)
     CartItem.objects.filter(cart=cart, product_variant_id=variant_id).delete()
-
-
-def db_cart_clear(client) -> None:
-    cart = get_or_create_draft_cart(client)
-    CartItem.objects.filter(cart=cart).delete()
+    cart_recalculate(cart)
 
 
 def build_db_cart_response(client) -> dict:
@@ -180,10 +222,16 @@ def build_db_cart_response(client) -> dict:
                     "slug": p.slug,
                     "name": p.name,
                     "image": (p.image.url if getattr(p, "image", None) else None),
-                    "brand": (p.brand.name if p.brand_id else None),
+                    "brand": (p.brand.name if p.brand else None),
+                    "category": (p.category.name if p.category else None),
                 },
             }
         )
+
+    # держим сумму в модели актуальной
+    cart.cart_total_sum = total
+    cart.save(update_fields=["cart_total_sum"])
+
     return {"items": items, "total": f"{total:.2f}"}
 
 
@@ -209,13 +257,20 @@ def merge_anon_cart_into_db_cart(*, client, anon_id: str) -> None:
 
 
 def cart_recalculate(cart: Cart) -> None:
+    """Пересчитать итог корзины и сохранить в cart.cart_total_sum.
+
+    ВАЖНО: нельзя делать только QuerySet.update(), иначе объект `cart` остаётся
+    со старым значением и последующий cart.save() может перезатереть сумму.
+    """
     items = cart_items_qs(cart)
     total = Decimal("0")
     for ci in items:
         v = ci.product_variant
         price = v.current_price or Decimal("0")
         total += price * ci.quantity
-    Cart.objects.filter(pk=cart.pk).update(cart_total_sum=total)
+
+    cart.cart_total_sum = total
+    cart.save(update_fields=["cart_total_sum"])
 
 
 @transaction.atomic
@@ -226,20 +281,16 @@ def order_mark_paid_by_id(cart_id: int) -> None:
     if cart.is_ordered:
         return
 
-    # Пересчёт на всякий случай
     cart_recalculate(cart)
 
-    # Переводим в "не выполнен" (так ты и хотел после успешной оплаты)
     cart.status = "not_completed"
     cart.is_ordered = True
-    cart.ordered_at = timezone.now().date()  # ВАЖНО: у тебя DateField
+    cart.ordered_at = timezone.now().date()  # DateField
     cart.save(update_fields=["status", "is_ordered", "ordered_at", "cart_total_sum"])
 
-    # Бонусы (если есть подходящая логика в модели Bonus)
     try:
-        if hasattr(Bonus, "create_from_order"):
-            Bonus.create_from_order(cart)
-    except Exception as e:
+        Bonus.create_from_order(cart)
+    except Exception:
         import logging
 
         logging.getLogger(__name__).exception(
@@ -247,10 +298,6 @@ def order_mark_paid_by_id(cart_id: int) -> None:
         )
 
 
-# «Повторить заказ»
-
-
-@transaction.atomic
 def repeat_order_into_draft(
     client, *, from_cart_id: int, merge_strategy: str = "max"
 ) -> int:
@@ -263,21 +310,20 @@ def repeat_order_into_draft(
         return 0
 
     dst = get_or_create_draft_cart(client)
-    existing = {ci.product_variant_id: ci.quantity for ci in cart_items_qs(dst)}
+
+    if merge_strategy == "replace":
+        CartItem.objects.filter(cart=dst).delete()
+        existing = {}
+    else:
+        existing = {ci.product_variant_id: ci.quantity for ci in cart_items_qs(dst)}
 
     moved = 0
-    for ci in cart_items_qs(src):
-        pv = ci.product_variant
-        if not pv or not pv.product.is_active:
-            continue
-        vid = pv.id
-
-        if merge_strategy == "replace":
-            final_qty = ci.quantity
-        elif merge_strategy == "sum":
-            final_qty = existing.get(vid, 0) + ci.quantity
+    for it in CartItem.objects.filter(cart=src).select_related("product_variant"):
+        vid = it.product_variant_id
+        if merge_strategy == "sum":
+            final_qty = existing.get(vid, 0) + it.quantity
         else:
-            final_qty = max(existing.get(vid, 0), ci.quantity)
+            final_qty = max(existing.get(vid, 0), it.quantity)
 
         if final_qty > 0:
             db_cart_add_or_set(client, variant_id=vid, qty=final_qty)
@@ -290,7 +336,7 @@ def repeat_order_into_draft(
 def sync_by_payment_or_order_id(ident: str) -> Dict[str, Any]:
     """
     Опросить T-Банк по PaymentId (если ident — число) или по OrderId (иначе).
-    Обновить наш Payment и, если CONFIRMED, отметить заказ оплаченным.
+    Обновить наш Payment и, если CONFIRMED/AUTHORIZED, отметить заказ оплаченным.
     Вернуть «сырое» тело ответа банка.
     """
     client = TBankClient()
@@ -320,7 +366,6 @@ def sync_by_payment_or_order_id(ident: str) -> Dict[str, Any]:
         )
 
     if pay:
-        # сохраним «последний статус» и сам ответ
         pay.raw_last_callback = {
             **resp,
             "_synced": True,
@@ -330,8 +375,8 @@ def sync_by_payment_or_order_id(ident: str) -> Dict[str, Any]:
             pay.status = resp["Status"]
         pay.save(update_fields=["raw_last_callback", "status"])
 
-        # если банк сказал CONFIRMED — оформляем заказ
-        if resp.get("Success") is True and resp.get("Status") == "CONFIRMED":
+        status_upper = str(resp.get("Status") or "").upper()
+        if resp.get("Success") is True and status_upper in ("CONFIRMED", "AUTHORIZED"):
             order_mark_paid_by_id(pay.cart_id)
 
     return resp

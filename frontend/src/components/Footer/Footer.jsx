@@ -38,68 +38,19 @@ function useYandexMaps() {
   return ready;
 }
 
-function YandexMap({ address = ADDRESS, coords = COORDS }) {
-  const ready = useYandexMaps();
-  const boxRef = useRef(null);
-  const mapRef = useRef(null);
-
-  useEffect(() => {
-    if (!ready || !boxRef.current) return;
-    const ymaps = window.ymaps;
-
-    mapRef.current = new ymaps.Map(boxRef.current, {
-      center: coords || FALLBACK_CENTER,
-      zoom: coords ? 16 : 15,
-      controls: ["zoomControl"],
-    });
-
-    const addPlacemark = (point) => {
-      const placemark = new ymaps.Placemark(
-        point,
-        {
-          hintContent: address,
-          balloonContent: address,
-          // подпись прямо рядом с меткой:
-          iconCaption: address,
-        },
-        {
-          preset: "islands#redIcon",
-        }
-      );
-      mapRef.current.geoObjects.add(placemark);
-      mapRef.current.setCenter(point, 17);
-      // Если нужно сразу показать балун — раскомментируй:
-      // placemark.balloon.open();
-    };
-
-    if (coords) {
-      addPlacemark(coords);
-    } else {
-      ymaps
-        .geocode(address, { results: 1 })
-        .then((res) => {
-          const first = res.geoObjects.get(0);
-          if (!first) return;
-          addPlacemark(first.geometry.getCoordinates());
-        })
-        .catch(() => {
-          // остаёмся на FALLBACK_CENTER без метки
-        });
-    }
-
-    return () => {
-      if (mapRef.current && mapRef.current.destroy) {
-        mapRef.current.destroy();
-        mapRef.current = null;
-      }
-    };
-  }, [ready, address, coords]);
-
-  // Соотношение 4:3
+function YandexMap() {
   return (
     <div className="relative w-full rounded-[10px] overflow-hidden border-2 border-[#1C1A61]">
       <div className="pt-[75%]" />
-      <div ref={boxRef} className="absolute inset-0 w-full h-full" />
+      <iframe
+        className="absolute inset-0 w-full h-full"
+        src="https://yandex.ru/map-widget/v1/?z=12&ol=biz&oid=1319644007"
+        width="560"
+        height="400"
+        frameBorder="0"
+        title="Карта магазина"
+        loading="lazy"
+      />
     </div>
   );
 }

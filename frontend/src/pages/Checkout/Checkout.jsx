@@ -4,6 +4,23 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import Container from "../../components/ui/Container";
 import api from "../../lib/api";
 
+const LAST_PAYMENT_KEY = "last_payment_ctx";
+
+function saveLastPayment(ctx) {
+  try {
+    localStorage.setItem(
+      LAST_PAYMENT_KEY,
+      JSON.stringify({ ...ctx, ts: Date.now() })
+    );
+  } catch {}
+}
+
+function clearLastPayment() {
+  try {
+    localStorage.removeItem(LAST_PAYMENT_KEY);
+  } catch {}
+}
+
 function formatRub(n) {
   const num = Number(n) || 0;
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 })
@@ -24,6 +41,7 @@ function normalizeCartItem(x) {
     slug: x?.product?.slug || null,
     image: x?.product?.image || null,
     size,
+    inStock: v.in_stock ?? true,
   };
 }
 
@@ -48,6 +66,8 @@ export default function Checkout() {
   const passedPromo = passedState.appliedPromo || null;
   const passedBonus = passedState.bonusApplied || 0;
 
+  const [cart, setCart] = useState(null);
+
   const [items, setItems] = useState([]);
   const [serverTotal, setServerTotal] = useState("0.00");
   const [loading, setLoading] = useState(true);
@@ -61,27 +81,49 @@ export default function Checkout() {
   // выбранный пункт самовывоза
   const [pickupId, setPickupId] = useState(PICKUP_POINTS[0].id);
 
+  // чтобы не жать оплату много раз
+  const [busy, setBusy] = useState(false);
+
   // грузим корзину ещё раз, чтобы были свежие данные
   useEffect(() => {
+    let alive = true;
+
     (async () => {
       setLoading(true);
       setError("");
       try {
         const data = await api.getCart();
+        if (!alive) return;
+
+        setCart(data || null);
+
         const list = (data?.items || [])
           .map(normalizeCartItem)
           .filter((i) => i.variantId);
         setItems(list);
-        setServerTotal(String(data?.total ?? "0.00"));
+
+        const total =
+          data?.total ??
+          data?.total_sum ??
+          data?.totalSum ??
+          data?.sum ??
+          "0.00";
+        setServerTotal(String(total));
       } catch (e) {
         console.error("load checkout cart error", e);
+        if (!alive) return;
         setItems([]);
+        setCart(null);
         setServerTotal("0.00");
         setError("Не удалось загрузить корзину");
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // базовая сумма корзины (как на бэке)
@@ -93,7 +135,13 @@ export default function Checkout() {
 
   // скидка по промокоду и бонусы (пока берём из location.state)
   const promoDiscount = passedPromo?.discountAmount || 0;
-  const bonusDiscount = passedBonus || 0;
+  const bonusDiscount = useMemo(() => {
+    const fromState = Number(passedBonus) || 0;
+    if (fromState > 0) return fromState;
+
+    const fromServer = Number(cart?.bonus_spent) || 0;
+    return fromServer > 0 ? fromServer : 0;
+  }, [passedBonus, cart]);
 
   const finalTotal = useMemo(() => {
     const raw = (baseTotal || 0) - (promoDiscount || 0) - (bonusDiscount || 0);
@@ -111,11 +159,10 @@ export default function Checkout() {
 
   const canPay = useMemo(() => {
     if (loading || isEmpty) return false;
+    if (busy) return false;
     if (!deliveryType) return false;
 
     if (deliveryType === "pickup") {
-      // пункт самовывоза выбран всегда (по умолчанию Краснодар),
-      // адрес не вводится вручную
       return true;
     }
 
@@ -124,34 +171,50 @@ export default function Checkout() {
     }
 
     return false;
-  }, [loading, isEmpty, deliveryType, address]);
+  }, [loading, isEmpty, busy, deliveryType, address]);
 
   const handlePayClick = async () => {
-    if (!canPay) return;
+    if (!canPay || busy) return;
 
     const finalAddress =
       deliveryType === "pickup" ? pickupAddress : address.trim();
 
     try {
+      setBusy(true);
+      clearLastPayment();
+
       const payload = {
         delivery_type: deliveryType, // "pickup" | "delivery"
         address: finalAddress, // строка адреса / магазина
         address_comment: addressComment || "", // комментарий к адресу
         pickup_id: deliveryType === "pickup" ? pickupId : null,
+
+        // если бэк ожидает promo_code / bonus_spent — передаём
+        promo_code: cart?.applied_promo_code || cart?.appliedPromoCode || null,
+        bonus_spent: Number(cart?.bonus_spent) || 0,
       };
 
       const data = await api.initPayment(payload);
 
       if (data && data.payment_url) {
+        // ✅ ВАЖНО: сохраняем идентификаторы платежа,
+        // чтобы /pay/success смог синкнуть даже без query-параметров
+        saveLastPayment({
+          payment_id: data.payment_id || data.PaymentId || null,
+          order_id: data.order_id || data.OrderId || null,
+        });
+
         // уходим в платёжную форму Т-банка
         window.location.href = data.payment_url;
       } else {
         console.error("initPayment: нет payment_url в ответе", data);
         alert("Не удалось получить ссылку на оплату. Попробуйте ещё раз.");
+        setBusy(false);
       }
     } catch (e) {
       console.error("initPayment error", e);
       alert("Не удалось запустить оплату. Попробуйте ещё раз.");
+      setBusy(false);
     }
   };
 
@@ -232,7 +295,7 @@ export default function Checkout() {
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
+                    <div className="text-right shrink-shrink-0">
                       <div className="text-[18px] sm:text-[20px] font-extrabold">
                         {formatRub(item.unitPrice * item.qty)} ₽
                       </div>
@@ -300,7 +363,6 @@ export default function Checkout() {
                       Доставка
                     </span>
 
-                    {/* 🔵 индикатор выбора, такой же как у Самовывоз */}
                     <span
                       className={[
                         "w-5 h-5 rounded-full border flex items-center justify-center",
@@ -353,7 +415,6 @@ export default function Checkout() {
                               {p.label}
                             </span>
 
-                            {/* 🔵 Радио-точка в таком же стиле, как у Самовывоз/Доставка */}
                             <span
                               className={[
                                 "w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ml-3",

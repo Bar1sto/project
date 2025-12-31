@@ -6,6 +6,20 @@
 /STATIC
 /core.zip
 /frontend.zip
+/Коньки_импорт.xml
+/Коньки_оферс.xml
+/search.py
+/search_two.py
+/products.sql
+/merge_products.py
+/offers.json
+/products_merged.json
+/products_merged.json
+/products_merged.sql
+/products.json
+
+
+
 # /frontend
 
 # /core/db.sqlite3

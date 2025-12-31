@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import Container from "../ui/Container";
 import ProductCard from "../ProductCard/ProductCard";
 import api from "../../lib/api";
@@ -14,6 +14,15 @@ function fmtPhone(raw) {
   const d = String(raw).replace(/\D/g, "");
   const x = d.padStart(11, "7").slice(0, 11).split("");
   return `+${x[0]} (${x[1]}${x[2]}${x[3]}) ${x[4]}${x[5]}${x[6]}-${x[7]}${x[8]}-${x[9]}${x[10]}`;
+}
+
+function formatRub(v) {
+  const num = Number(v) || 0;
+  return new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 0,
+  })
+    .format(num)
+    .replace(/\u00A0/g, " ");
 }
 
 function bearer() {
@@ -44,7 +53,7 @@ const EP = {
   me: ["/clients/me/", "/customers/me/", "/users/me/", "/auth/user/"],
   // /favorites/ есть на бэке, ставим первым
   favorites: ["/favorites/", "/products/favorites/"],
-  orders: ["/orders/", "/orders/history/"],
+  orders: ["/orders/history/"],
 };
 
 async function firstOk(paths) {
@@ -57,6 +66,15 @@ async function firstOk(paths) {
   throw new Error("No endpoint worked");
 }
 
+const handleRepeatOrder = async (orderId) => {
+  try {
+    await api.repeatOrder(orderId);
+    navigate("/checkout");
+  } catch (e) {
+    console.error("repeat order error", e);
+  }
+};
+
 export default function Profile() {
   const [me, setMe] = useState(null);
   const [favorites, setFavorites] = useState([]);
@@ -64,10 +82,25 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState(null);
-
   const [activeTab, setActiveTab] = useState(null); // 'history' | 'favorites' | 'cert' | 'settings'
   const fileInputRef = useRef(null);
   const favLoadingRef = useRef(false);
+  const navigate = useNavigate();
+  const handleRepeatOrder = useCallback(
+    async (orderId) => {
+      try {
+        await api.repeatOrder(orderId);
+        // скажем всему фронту, что корзина изменилась
+        window.dispatchEvent(new Event("cart:changed"));
+        // и уводим пользователя на оформление заказа
+        navigate("/checkout");
+      } catch (e) {
+        console.error("repeat order failed", e);
+        // при желании можешь повесить тут toast / alert
+      }
+    },
+    [navigate]
+  );
   const reloadFavorites = async () => {
     if (favLoadingRef.current) return;
     favLoadingRef.current = true;
@@ -470,7 +503,12 @@ export default function Profile() {
                         className="flex flex-col md:flex-row md:items-center justify_between gap-2 border border-[#1C1A61]/20 rounded-[12px] px-4 py-3 bg-[#F6F6F6]"
                       >
                         <div>
-                          <div className="font-bold text-[18px]">
+                          <div
+                            className="font-bold text-[18px] hover:text-[#EC1822] cursor-pointer transition-colors"
+                            onClick={() =>
+                              navigate(`/profile/orders/${o.id || o.number}`)
+                            }
+                          >
                             Чек № {o.number || o.id}
                           </div>
                           <div className="text-[14px] text-[#1C1A61]/70">
@@ -484,6 +522,7 @@ export default function Profile() {
                           <button
                             type="button"
                             className="rounded-[10px] px-4 py-2 bg-[#1C1A61] text-white text-[16px] hover:bg-[#EC1822] transition-colors"
+                            onClick={() => handleRepeatOrder(o.id)}
                           >
                             Повторить заказ
                           </button>

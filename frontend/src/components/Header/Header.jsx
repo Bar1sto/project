@@ -117,6 +117,11 @@ export default function Header() {
   // поиск
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [noResults, setNoResults] = useState(false);
+  const searchBoxRef = useRef(null);
+  const debounceRef = useRef(null);
 
   // состояние каталога
   const [catalogOpen, setCatalogOpen] = useState(false);
@@ -167,10 +172,162 @@ export default function Header() {
     return () => window.removeEventListener("resize", calc);
   }, []);
 
+  const normalizeStr = (s) =>
+    String(s || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const extractList = (data) => {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.results)) return data.results;
+    if (Array.isArray(data.items)) return data.items;
+    return [];
+  };
+
+  const rankAndCut = (list, query, limit = 5) => {
+    const nq = normalizeStr(query);
+    if (!nq) return [];
+
+    const ranked = list
+      .map((p) => {
+        const name = normalizeStr(p?.name);
+        const slug = normalizeStr(p?.slug);
+        let score = 999;
+
+        if (name === nq) score = 0;
+        else if (name.startsWith(nq)) score = 1;
+        else if (name.includes(nq)) score = 2;
+        else if (slug.includes(nq)) score = 3;
+
+        return { p, score, nameLen: name.length };
+      })
+      .filter((x) => x.score < 999)
+      .sort((a, b) => a.score - b.score || a.nameLen - b.nameLen);
+
+    const exact = ranked.find((x) => x.score === 0);
+    if (exact) return [exact.p];
+
+    return ranked.slice(0, limit).map((x) => x.p);
+  };
+
+  const fetchSuggestions = useCallback(async (query) => {
+    const qq = String(query || "").trim();
+    if (qq.length < 2) {
+      setSuggestions([]);
+      setSearching(false);
+      setNoResults(false);
+      return;
+    }
+
+    setSearching(true);
+    setNoResults(false);
+
+    try {
+      // 1) server-side search
+      let res = await fetch(
+        `/api/products/?search=${encodeURIComponent(qq)}&limit=50`,
+        { headers: { Accept: "application/json" } }
+      );
+      let data = await res.json().catch(() => ({}));
+      let list = extractList(data);
+
+      // 2) fallback q=
+      if (!list.length) {
+        res = await fetch(
+          `/api/products/?q=${encodeURIComponent(qq)}&limit=50`,
+          {
+            headers: { Accept: "application/json" },
+          }
+        );
+        data = await res.json().catch(() => ({}));
+        list = extractList(data);
+      }
+
+      // 3) если бэк не фильтрует — берём побольше и фильтруем на фронте
+      if (!list.length) {
+        res = await fetch(`/api/products/?limit=200`, {
+          headers: { Accept: "application/json" },
+        });
+        data = await res.json().catch(() => ({}));
+        list = extractList(data);
+      }
+
+      const cut = rankAndCut(list, qq, 5);
+      setSuggestions(cut);
+      setNoResults(cut.length === 0);
+    } catch (e) {
+      console.error("search error", e);
+      setSuggestions([]);
+      setNoResults(true);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
   const onSubmitSearch = (e) => {
     e.preventDefault();
-    // поиск потом
+    const qq = String(q || "").trim();
+    if (!qq) return;
+
+    // если есть подсказки — открываем первую (как “точное совпадение” / лучший матч)
+    if (suggestions && suggestions.length) {
+      const s = suggestions[0];
+      if (s?.slug) {
+        setIsSearchOpen(false);
+        setSuggestions([]);
+        setNoResults(false);
+        navigate(`/product/${s.slug}`);
+        return;
+      }
+    }
+
+    // иначе ведём в каталог с поиском (если у каталога есть фильтр по search)
+    setIsSearchOpen(false);
+    setSuggestions([]);
+    setNoResults(false);
+    navigate(`/catalog?search=${encodeURIComponent(qq)}`);
   };
+
+  useEffect(() => {
+    if (!isSearchOpen) return;
+
+    const qq = String(q || "").trim();
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (qq.length < 2) {
+      setSuggestions([]);
+      setSearching(false);
+      setNoResults(false);
+      return;
+    }
+
+    debounceRef.current = setTimeout(() => {
+      fetchSuggestions(qq);
+    }, 250);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [q, isSearchOpen, fetchSuggestions]);
+
+  useEffect(() => {
+    const onDown = (e) => {
+      if (!isSearchOpen) return;
+      const box = searchBoxRef.current;
+      if (!box) return;
+      if (box.contains(e.target)) return;
+
+      setIsSearchOpen(false);
+      setSuggestions([]);
+      setNoResults(false);
+    };
+
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [isSearchOpen]);
 
   return (
     <header
@@ -318,7 +475,10 @@ export default function Header() {
 
       {/* полоса поиска */}
       {isSearchOpen && (
-        <div className="bg-[#E5E5E5] border-t border-[#1C1A61]/10">
+        <div
+          ref={searchBoxRef}
+          className="bg-[#E5E5E5] border-t border-[#1C1A61]/10"
+        >
           <form
             onSubmit={onSubmitSearch}
             className="mx-auto w-full max-w-screen-2xl px-4 lg:px-6 py-3 flex items-center gap-3"
@@ -338,6 +498,97 @@ export default function Header() {
               ×
             </button>
           </form>
+          {/* подсказки поиска */}
+          {String(q || "").trim().length >= 2 && (
+            <div className="mx-auto w-full max-w-screen-2xl px-4 lg:px-6 pb-3 text-[#1C1A61]">
+              {searching && (
+                <div className="text-[14px] text-[#1C1A61]/70 px-2 py-2">
+                  Поиск…
+                </div>
+              )}
+
+              {!searching && suggestions && suggestions.length > 0 && (
+                <div className="space-y-3">
+                  {suggestions.slice(0, 5).map((p) => {
+                    const img =
+                      p?.image ||
+                      p?.image_url ||
+                      p?.main_image ||
+                      p?.thumbnail ||
+                      p?.images?.[0]?.image ||
+                      p?.images?.[0]?.url ||
+                      null;
+
+                    const price =
+                      p?.price ??
+                      p?.current_price ??
+                      p?.min_price ??
+                      p?.minPrice ??
+                      null;
+
+                    return (
+                      <button
+                        key={p?.id || p?.slug || p?.name}
+                        type="button"
+                        onClick={() => {
+                          if (!p?.slug) return;
+                          setIsSearchOpen(false);
+                          setSuggestions([]);
+                          setNoResults(false);
+                          navigate(`/product/${p.slug}`);
+                        }}
+                        className="w-full border border-[#1C1A61]/20 rounded-[12px] p-3 sm:p-4 flex gap-3 sm:gap-4 items-center bg-[#F3F3F3] hover:bg-white/60 transition text-left"
+                      >
+                        <div className="w-[70px] h-[70px] rounded-[10px] border border-[#1C1A61]/40 bg:white flex items-center justify-center overflow-hidden shrink-0 bg-white">
+                          {img ? (
+                            <img
+                              src={img}
+                              alt={p?.name || "Товар"}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-[#1C1A61]/50 text-[12px]">
+                              Фото
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[16px] sm:text-[18px] font-semibold truncate">
+                            {p?.name || "Товар"}
+                          </div>
+
+                          {/* как в Checkout — вторую строку делаем "Размер: —" чтобы стиль совпадал */}
+                          <div className="text-[14px] text-[#1C1A61]/70 mt-1">
+                            Размер: —
+                          </div>
+
+                          {/* как в Checkout — третья строка (количество) */}
+                          <div className="text-[14px] text-[#1C1A61]/70">
+                            Количество: 1 шт.
+                          </div>
+                        </div>
+
+                        {price !== null && price !== undefined && (
+                          <div className="text-right shrink-0">
+                            <div className="text-[18px] sm:text-[20px] font-extrabold">
+                              {formatRub(price)} ₽
+                            </div>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!searching && noResults && (
+                <div className="text-[14px] text-[#1C1A61]/70 px-2 py-2">
+                  Такого товара похоже нет :(
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -12,26 +12,27 @@ export default function HeroSlider() {
   return (
     <section className="py-6">
       <Container size="wide">
-        <Swiper
-          modules={[Autoplay]}
-          autoplay={{ delay: 5000, disableOnInteraction: false }}
-          loop
-          className="
-            h-[260px] sm:h-[320px] md:h-[400px] lg:h-[460px] xl:h-[520px]
-            rounded-[28px] overflow-hidden border-2 border-[#1C1A61]
-          "
-        >
-          {slides.map((s) => (
-            <SwiperSlide key={s.id}>
-              <img
-                src={s.image}
-                alt={s.alt}
-                className="w-full h-full object-cover"
-                draggable={false}
-              />
-            </SwiperSlide>
-          ))}
-        </Swiper>
+        {/* Было .sliderContainer */}
+        <div className="w-[calc(100%-110px)] h-[400px] my-[40px] mx-auto">
+          <Swiper
+            modules={[Autoplay]}
+            autoplay={{ delay: 5000, disableOnInteraction: false }}
+            loop
+            /* Было .swiper */
+            className="h-full w-full rounded-[50px] overflow-hidden border-[3px] border-[#1C1A61] box-border"
+          >
+            {slides.map((s) => (
+              <SwiperSlide key={s.id} className="h-full w-full">
+                <img
+                  src={s.image}
+                  alt={s.alt}
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </div>
       </Container>
     </section>
   );
